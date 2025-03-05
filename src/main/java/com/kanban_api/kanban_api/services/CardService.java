@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kanban_api.kanban_api.config.KanbanConfig;
 import com.kanban_api.kanban_api.models.Card;
+import com.kanban_api.kanban_api.models.User;
+import com.kanban_api.kanban_api.models.UserResponse;
 import com.kanban_api.kanban_api.views.CardView;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpEntity;
@@ -29,6 +31,9 @@ public class CardService {
     private CardView cardView;
     @Autowired
     private ExcelService excelService;
+
+    @Autowired
+    private DailyService dailyService;
 
     private List<Card> fetchCards(String startDate, String endDate, String columnId, boolean filterGithub) {
         try {
@@ -92,8 +97,11 @@ public class CardService {
             // 🔹 Salvar os resultados em JSON
             cardView.saveResults(allCards);
 
+            UserResponse userResponse = dailyService.fetchUsers();
+            List<User> allUsers = userResponse.data();
+
             // 🔹 Gerar relatório em Excel
-            excelService.saveToExcel(allCards, singleSheet, columnList);
+            excelService.saveToExcel(allCards, singleSheet, columnList, allUsers);
 
             return allCards;
 
