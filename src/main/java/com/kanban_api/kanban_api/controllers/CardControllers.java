@@ -24,18 +24,15 @@ public class CardControllers {
 
     @Autowired
     private CardService cardService;
+
     @Autowired
     private ClearService clearService;
 
     /**
      * Retorna os cards do Kanban dentro de um período e gera um relatório em Excel.
      *
-     * @param startDate    Data de início no formato YYYY-MM-DD. Padrão: Últimos 7 dias.
-     * @param endDate      Data de fim no formato YYYY-MM-DD. Padrão: Hoje.
-     * @param columnIds    IDs das colunas separadas por vírgula. Exemplo: "32,164,163" (Ready to Deploy, Client demo, Deployed).
-     * @param singleSheet  Se true, gera uma única planilha combinada. Se false, gera uma planilha para cada column_id.
-     * @param filterGithub Se true, retorna apenas os cards com link do GitHub. Se false, retorna todos os cards.
-     * @return Lista de cards filtrados de acordo com os parâmetros.
+     * Parâmetro extra:
+     * - fill_channels: se true, preenche a coluna "Canal" (mais lento, pois chama /cards/{cardId}/tags e aguarda 2s entre cada chamada).
      */
     @Operation(
             summary = "Lista os cards do Kanban dentro de um período",
@@ -60,23 +57,30 @@ public class CardControllers {
             @Parameter(description = "Data de fim (YYYY-MM-DD). Padrão: Hoje.")
             @RequestParam(required = false, name = "end_date") String endDate,
 
-            @Parameter(description = "IDs das colunas separadas por vírgula. Exemplo: 32,164,163 (Ready to Deploy, Client demo, Deployed).")
+            @Parameter(description = "IDs das colunas separadas por vírgula. Exemplo: 32,164,163.")
             @RequestParam(defaultValue = "32,164,163", name = "column_ids") String columnIds,
 
             @Parameter(description = "Se true, gera uma única planilha combinada. Se false, gera uma planilha para cada column_id.")
             @RequestParam(defaultValue = "true", name = "single_sheet") boolean singleSheet,
 
             @Parameter(description = "Se true, retorna apenas os cards com link do GitHub. Se false, retorna todos os cards.")
-            @RequestParam(defaultValue = "false", name = "filter_github") boolean filterGithub) {
+            @RequestParam(defaultValue = "true", name = "filter_github") boolean filterGithub,
 
-        return cardService.getCards(startDate, endDate, columnIds, singleSheet, filterGithub);
+            @Parameter(description = "Se true, preenche a coluna 'Canal' (mais lento). Se false, a coluna fica vazia. Isso acontece pois, ele aguarda 2s antes de cada request de tags para evitar 429 Too Many Requests")
+            @RequestParam(defaultValue = "true", name = "fill_channels") boolean fillChannels
+    ) {
+        return cardService.getCards(
+                startDate,
+                endDate,
+                columnIds,
+                singleSheet,
+                filterGithub,
+                fillChannels
+        );
     }
-
 
     /**
      * Remove arquivos da pasta "output", mantendo o .gitkeep.
-     *
-     * @return Mensagem de sucesso ou erro.
      */
     @Operation(
             summary = "Limpa arquivos gerados na pasta output",
