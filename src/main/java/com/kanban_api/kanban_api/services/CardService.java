@@ -29,7 +29,7 @@ public class CardService {
     private ExcelService excelService;
 
     @Autowired
-    private DailyService dailyService;
+    private UserService userService;
 
     private List<Card> fetchCards(String startDate, String endDate, String columnId, boolean filterGithub) {
         try {
@@ -108,7 +108,7 @@ public class CardService {
             cardView.saveResults(allCards);
 
             // Obter usuários
-            UserResponse userResponse = dailyService.fetchUsers();
+            UserResponse userResponse = userService.fetchUsers();
             List<User> allUsers = userResponse.data();
 
             // Gerar relatório em Excel

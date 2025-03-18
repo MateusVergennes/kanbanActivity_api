@@ -30,11 +30,6 @@ public class DailyController {
         return  ResponseEntity.status(HttpStatus.OK).body(cards);
     }
 
-    @GetMapping("/users")
-    public ResponseEntity<UserResponse> getUsers() {
-        return ResponseEntity.status(HttpStatus.OK).body(dailyService.fetchUsers());
-    }
-
     @GetMapping("/columns")
     public ResponseEntity<ColumnResponse> getColumns() {
         return ResponseEntity.status(HttpStatus.OK).body(dailyService.fetchColumns());

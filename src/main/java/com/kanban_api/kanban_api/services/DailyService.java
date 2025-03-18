@@ -76,27 +76,6 @@ public class DailyService {
     }
 
     @Transactional
-    public UserResponse fetchUsers() {
-        try {
-            String url = kanbanConfig.getApiUrl() + "/users";
-            RestTemplate restTemplate = new RestTemplate();
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("apikey", kanbanConfig.getApiKey());
-            headers.setContentType(MediaType.APPLICATION_JSON);
-
-            HttpEntity<String> entity = new HttpEntity<>(headers);
-            ResponseEntity<String> response = restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
-
-            ObjectMapper mapper = new ObjectMapper();
-            return mapper.readValue(response.getBody(), UserResponse.class);
-
-        } catch (Exception e) {
-            throw new RuntimeException("Erro ao buscar usuários: " + e.getMessage());
-        }
-    }
-
-    @Transactional
     public ColumnResponse fetchColumns() {
         try {
             String url = kanbanConfig.getApiUrl() + "/boards/" + kanbanConfig.getBoardId() + "/columns";
