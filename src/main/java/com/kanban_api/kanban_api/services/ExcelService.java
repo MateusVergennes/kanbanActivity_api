@@ -139,13 +139,22 @@ public class ExcelService {
 
     private String getTituloFinal(Card card) {
         String titulo = card.title();
+        boolean encontrouCampo13 = false;
         // Verifica se custom_field 13 tem um valor alternativo para título
         for (CustomField field : card.customFields()) {
             if (field.fieldId() == 13 && field.value() != null && !field.value().isEmpty()) {
                 titulo = field.value();
+                encontrouCampo13 = true;
                 break;
             }
         }
+
+        // Se não encontrou o custom_field 13 (ou ele está vazio),
+        // adiciona " -PENDENTE" ao título original do card
+        if (!encontrouCampo13) {
+            titulo += " -PENDENTE";
+        }
+
         return titulo;
     }
 
