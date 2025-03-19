@@ -34,6 +34,9 @@ public class CardControllers {
      * Parâmetro extra:
      * - fill_channels: se true, preenche a coluna "Canal" (mais lento, pois chama /cards/{cardId}/tags e aguarda 2s entre cada chamada).
      */
+    // ---------------------------------------------
+    // 1) Relatório semanal (weeklyReport)
+    // ---------------------------------------------
     @Operation(
             summary = "Lista os cards do Kanban dentro de um período",
             description = "Retorna os cards obtidos da API externa dentro do intervalo de datas fornecido. "
@@ -49,7 +52,7 @@ public class CardControllers {
             description = "Erro interno ao processar a requisição",
             content = @Content(mediaType = "application/json")
     )
-    @GetMapping
+    @GetMapping("/weeklyReport")
     public List<Card> getKanbanCards(
             @Parameter(description = "Data de início (YYYY-MM-DD). Padrão: Últimos 7 dias.")
             @RequestParam(required = false, name = "start_date") String startDate,
@@ -66,17 +69,29 @@ public class CardControllers {
             @Parameter(description = "Se true, retorna apenas os cards com link do GitHub. Se false, retorna todos os cards.")
             @RequestParam(defaultValue = "true", name = "filter_github") boolean filterGithub,
 
-            @Parameter(description = "Se true, preenche a coluna 'Canal' (mais lento). Se false, a coluna fica vazia. Isso acontece pois, ele aguarda 2s antes de cada request de tags para evitar 429 Too Many Requests")
+            @Parameter(description = "Se true, preenche a coluna 'Canal'")
             @RequestParam(defaultValue = "true", name = "fill_channels") boolean fillChannels
     ) {
-        return cardService.getCards(
-                startDate,
-                endDate,
-                columnIds,
-                singleSheet,
-                filterGithub,
-                fillChannels
-        );
+        return cardService.getWeeklyReport(startDate, endDate, columnIds, singleSheet, filterGithub, fillChannels);
+    }
+
+    // ---------------------------------------------
+    // 2) Relatório DEV (devReport)
+    // ---------------------------------------------
+    @Operation(summary = "Gera relatório de desenvolvimento (devReport)")
+    @GetMapping("/devReport")
+    public List<Card> getDevReport(
+            @RequestParam(required = false, name = "start_date") String startDate,
+            @RequestParam(required = false, name = "end_date") String endDate,
+
+            // Padrão: só coluna 31, que seria "IN PROGRESS"
+            @RequestParam(defaultValue = "30,31,32,33,73,74,76,81,163,164", name = "column_ids") String columnIds,
+
+            @RequestParam(defaultValue = "false", name = "filter_github") boolean filterGithub,
+            @RequestParam(defaultValue = "true", name = "fill_channels") boolean fillChannels
+    ) {
+        boolean singleSheet = true;
+        return cardService.getDevReport(startDate, endDate, columnIds, singleSheet, filterGithub, fillChannels);
     }
 
     /**

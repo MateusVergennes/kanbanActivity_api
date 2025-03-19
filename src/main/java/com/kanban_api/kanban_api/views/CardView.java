@@ -12,23 +12,24 @@ import java.util.List;
 public class CardView {
 
     private static final String OUTPUT_DIR = "output";
-    private static final String FILE_PATH = OUTPUT_DIR + "/results-kanban.json";
 
-    public void saveResults(List<Card> cards) {
+    public void saveResults(List<Card> cards, String fileName) {
         try {
             File directory = new File(OUTPUT_DIR);
             if (!directory.exists()) {
                 directory.mkdir();
             }
 
-            ObjectMapper mapper = new ObjectMapper();
-            mapper.writeValue(new File(FILE_PATH), cards);
+            // Monta o path completo usando fileName
+            String filePath = OUTPUT_DIR + "/" + fileName;
 
-            System.out.println("✅ JSON salvo em: " + FILE_PATH);
+            ObjectMapper mapper = new ObjectMapper();
+            mapper.writeValue(new File(filePath), cards);
+
+            System.out.println("✅ JSON salvo em: " + filePath);
 
         } catch (IOException e) {
             throw new RuntimeException("Erro ao salvar JSON: " + e.getMessage());
         }
     }
-
 }
