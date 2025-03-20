@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -18,15 +19,18 @@ public class ExcelService {
     @Autowired
     private TagService tagService;
 
+    @Autowired
+    private IntervalProgressService intervalProgressService;
+
     private static final String OUTPUT_DIR = "output/";
 
     /**
      * Ordem preferencial das colunas:
      */
     private static final List<String> PREFERRED_ORDER = Arrays.asList(
+            "IN PROGRESS",
             "BACKLOG",
             "TO DO",
-            "IN PROGRESS",
             "CODE REVIEW",
             "READY FOR QA",
             "QA TEST",
@@ -63,9 +67,12 @@ public class ExcelService {
             Map<Integer, String> tagMap = allTags.stream()
                     .collect(Collectors.toMap(Tag::tag_id, Tag::label));
 
+            // isDevReport = false aqui, pois é o relatório semanal
+            boolean isDevReport = false;
+
             if (singleSheet) {
                 String filepath = OUTPUT_DIR + fileBaseName + ".xlsx";
-                saveSingleSheetExcel(filepath, cards, userMap, tagMap, fillChannels, includePoints);
+                saveSingleSheetExcel(filepath, cards, userMap, tagMap, fillChannels, includePoints, isDevReport);
             } else {
                 // Se não for singleSheet, gerar 1 arquivo por coluna
                 Map<Integer, List<Card>> cardsByColumn = cards.stream()
@@ -76,7 +83,7 @@ public class ExcelService {
                     List<Card> cardsDaColuna = cardsByColumn.getOrDefault(colId, List.of());
 
                     String filePath = OUTPUT_DIR + fileBaseName + "-" + columnId + ".xlsx";
-                    saveSingleSheetExcel(filePath, cardsDaColuna, userMap, tagMap, fillChannels, includePoints);
+                    saveSingleSheetExcel(filePath, cardsDaColuna, userMap, tagMap, fillChannels, includePoints, isDevReport);
                 }
             }
 
@@ -94,7 +101,8 @@ public class ExcelService {
             Map<Long, User> userMap,
             Map<Integer, String> tagMap,
             boolean fillChannels,
-            boolean includePoints
+            boolean includePoints,
+            boolean isDevReport  // <-- novo parâmetro
     ) throws IOException {
 
         Workbook workbook = new XSSFWorkbook();
@@ -104,7 +112,7 @@ public class ExcelService {
         cards = cards.stream()
                 .sorted(
                         Comparator
-                                .comparingInt((Card c) -> getPriority(getTituloFinal(c)))
+                                .comparingInt((Card c) -> getPriority(getTituloFinal(c, isDevReport)))
                                 .thenComparing((Card c) -> getDeveloperName(c.ownerUserId(), userMap))
                 )
                 .collect(Collectors.toList());
@@ -117,7 +125,8 @@ public class ExcelService {
         for (Card card : cards) {
             Row row = sheet.createRow(rowIndex++);
 
-            String tituloFinal = getTituloFinal(card);
+            // Agora chamamos getTituloFinal com isDevReport
+            String tituloFinal = getTituloFinal(card, isDevReport);
             String dev = getDeveloperName(card.ownerUserId(), userMap);
             String chamado = card.customId();
 
@@ -184,7 +193,9 @@ public class ExcelService {
             List<User> allUsers,
             boolean fillChannels,
             String fileBaseName,
-            List<Column> columns
+            List<Column> columns,
+            LocalDateTime from,
+            LocalDateTime to
     ) {
         try {
             File directory = new File(OUTPUT_DIR);
@@ -201,10 +212,12 @@ public class ExcelService {
             Map<Integer, String> tagMap = allTags.stream()
                     .collect(Collectors.toMap(Tag::tag_id, Tag::label));
 
-            // Gera singleSheet ou multi-sheet
+            // isDevReport = true, pois este método gera o "devReport"
+            boolean isDevReport = true;
+
             if (singleSheet) {
                 String filepath = OUTPUT_DIR + fileBaseName + ".xlsx";
-                saveSingleSheetDevDynamic(filepath, cards, userMap, tagMap, fillChannels, columns);
+                saveSingleSheetDevDynamic(filepath, cards, userMap, tagMap, fillChannels, columns, from, to, isDevReport);
             } else {
                 Map<Integer, List<Card>> cardsByColumn = cards.stream()
                         .collect(Collectors.groupingBy(Card::columnId));
@@ -214,7 +227,7 @@ public class ExcelService {
                     List<Card> cardsDaColuna = cardsByColumn.getOrDefault(colId, List.of());
 
                     String filePath = OUTPUT_DIR + fileBaseName + "-" + columnId + ".xlsx";
-                    saveSingleSheetDevDynamic(filePath, cardsDaColuna, userMap, tagMap, fillChannels, columns);
+                    saveSingleSheetDevDynamic(filePath, cardsDaColuna, userMap, tagMap, fillChannels, columns, from, to, isDevReport);
                 }
             }
         } catch (Exception e) {
@@ -231,10 +244,13 @@ public class ExcelService {
             Map<Long, User> userMap,
             Map<Integer, String> tagMap,
             boolean fillChannels,
-            List<Column> columns
+            List<Column> columns,
+            LocalDateTime from,
+            LocalDateTime to,
+            boolean isDevReport  // <-- novo parâmetro
     ) throws IOException {
 
-        // 1) Ordena "columns" pela lista preferida + alfabético
+        // 1) Ordena as colunas pela ordem preferencial + alfabético
         List<Column> sortedColumns = new ArrayList<>(columns);
         sortedColumns.sort((c1, c2) -> {
             String n1 = c1.name().toUpperCase();
@@ -254,93 +270,128 @@ public class ExcelService {
             if (idx2 >= 0 && idx1 < 0) {
                 return 1;
             }
-            // Nenhum dos dois na preferida -> ordenar por nome
+            // Nenhum na preferida -> comparar por nome
             return n1.compareTo(n2);
         });
 
-        // 2) Ordena os cards (exemplo)
-        Workbook workbook = new XSSFWorkbook();
-        Sheet sheet = workbook.createSheet("devReport");
-
+        // 2) Ordena os cards:
+        //    - prioridade (melhoria=1, incidente=2, requisição=3, default=4)
+        //    - depois nome do dev
         cards = cards.stream()
                 .sorted(
                         Comparator
-                                .comparingInt((Card c) -> getPriority(getTituloFinal(c)))
+                                .comparingInt((Card c) -> getPriority(getTituloFinal(c, isDevReport)))
                                 .thenComparing((Card c) -> getDeveloperName(c.ownerUserId(), userMap))
                 )
                 .collect(Collectors.toList());
 
-        // 3) Monta cabeçalho fixo
+        // 3) Cria a planilha
+        Workbook workbook = new XSSFWorkbook();
+        Sheet sheet = workbook.createSheet("devReport");
+
+        // 4) Cabeçalho fixo
         Row header = sheet.createRow(0);
         header.createCell(0).setCellValue("Título");
         header.createCell(1).setCellValue("Desenvolvedor");
         header.createCell(2).setCellValue("Canal");
         header.createCell(3).setCellValue("Chamado");
-
         header.createCell(4).setCellValue("Horas Estipuladas");
+        header.createCell(5).setCellValue("Progresso (%)");
+        header.createCell(6).setCellValue("IN PROGRESS INTERVAL");
 
-        // 4) Cria colunas extras, seguindo "sortedColumns"
-        int dynamicStart = 5;
+        // 5) Agora criamos as colunas dinâmicas a partir de dynamicStart=7
+        int dynamicStart = 7;
         for (int i = 0; i < sortedColumns.size(); i++) {
             header.createCell(dynamicStart + i).setCellValue(sortedColumns.get(i).name());
         }
 
-        // 5) Preenche linhas
+        // 6) Preenche as linhas
         int rowIndex = 1;
         for (Card card : cards) {
             Row row = sheet.createRow(rowIndex++);
 
-            String titulo = getTituloFinal(card);
+            // 6.1) Dados básicos (agora com isDevReport=true)
+            String titulo = getTituloFinal(card, isDevReport);
             String dev = getDeveloperName(card.ownerUserId(), userMap);
             String chamado = card.customId();
 
+            // Monta canal
             String canal = "";
             if (fillChannels) {
-                List<Integer> cardTagIds = (card.tagIds() != null) ? card.tagIds() : List.of();
-                canal = cardTagIds.stream()
+                List<Integer> tagIds = (card.tagIds() != null) ? card.tagIds() : List.of();
+                canal = tagIds.stream()
                         .map(id -> tagMap.getOrDefault(id, ""))
-                        .filter(lbl -> !lbl.isBlank())
+                        .filter(s -> !s.isBlank())
                         .collect(Collectors.joining(", "));
             }
 
-            // Preenche as 5 colunas fixas
+            // Preenche as colunas fixas
             row.createCell(0).setCellValue(titulo);
             row.createCell(1).setCellValue(dev);
             row.createCell(2).setCellValue(canal);
             row.createCell(3).setCellValue(chamado);
 
-            String stipulatedHours = getStipulatedHours(card);
-            row.createCell(4).setCellValue(stipulatedHours);
+            // Horas Estipuladas (coluna 4)
+            String stipulatedHoursStr = getStipulatedHours(card);
+            row.createCell(4).setCellValue(stipulatedHoursStr);
 
-            // Monta map columnId -> leadTime
+            double stipulatedHours = 0.0;
+            if (stipulatedHoursStr != null && !stipulatedHoursStr.isEmpty()) {
+                try {
+                    // Permite tanto . quanto , como separador decimal
+                    stipulatedHours = Double.parseDouble(stipulatedHoursStr.replace(",", "."));
+                } catch (NumberFormatException e) {
+                    // se der erro, fica em 0
+                }
+            }
+
+            // 6.2) Calcula "Progresso (%)" na coluna 5
+            //      tempo em "IN PROGRESS" => ID=31
             List<LeadTimePerColumn> leadTimes = (card.leadTimePerColumn() != null)
                     ? card.leadTimePerColumn()
                     : List.of();
-            Map<Long, Long> leadMap = leadTimes.stream().collect(Collectors.toMap(
+            Map<Long, Long> leadMap = leadTimes.stream()
+                    .collect(Collectors.toMap(
                             lt -> (long) lt.columnId(),
                             LeadTimePerColumn::leadTime
                     ));
 
-            int colIndex = 5;
+            long inProgressSeconds = leadMap.getOrDefault(31L, 0L);
+            double estimatedSeconds = stipulatedHours * 3600.0;
+
+            double progressPercentage = 0.0;
+            if (estimatedSeconds > 0 && inProgressSeconds > 0) {
+                progressPercentage = (inProgressSeconds / estimatedSeconds) * 100.0;
+            }
+
+            String progressText = String.format("%.1f%%", progressPercentage);
+            row.createCell(5).setCellValue(progressText);
+
+            // 6.3) IN PROGRESS INTERVAL => tempo parcial no [from, to]
+            long partialSeconds = intervalProgressService.getInProgressWithinPeriod(card, from, to);
+            row.createCell(6).setCellValue(formatSeconds(partialSeconds));
+
+            // 6.4) Preenche as colunas dinâmicas
+            int colIndex = dynamicStart;
             for (Column col : sortedColumns) {
                 long cId = col.column_id();
-                Long seconds = leadMap.getOrDefault(cId, 0L);
+                long seconds = leadMap.getOrDefault(cId, 0L);
                 if (seconds > 0) {
                     row.createCell(colIndex).setCellValue(formatSeconds(seconds));
                 } else {
-                    // caso não tenha lead time nessa coluna
                     row.createCell(colIndex).setCellValue("");
                 }
                 colIndex++;
             }
         }
 
-        // 6) Salva e fecha
+        // 7) Salva o arquivo
         try (FileOutputStream fos = new FileOutputStream(filePath)) {
             workbook.write(fos);
         }
         workbook.close();
     }
+
 
     /**
      * Converte segundos em "HHh MMm SSs"
@@ -354,22 +405,39 @@ public class ExcelService {
     }
 
     // ---------------------------------------------------
-    // Métodos auxiliares (iguais aos anteriores)
+    // Métodos auxiliares
     // ---------------------------------------------------
-    private String getTituloFinal(Card card) {
+
+    /**
+     * Ajusta o título de um Card. Se não encontrou o campo 13, só anexa "-PENDENTE"
+     * quando não for devReport.
+     */
+    private String getTituloFinal(Card card, boolean isDevReport) {
         String titulo = card.title();
         boolean encontrouCampo13 = false;
-        for (CustomField field : card.customFields()) {
-            if (field.fieldId() == 13 && field.value() != null && !field.value().isEmpty()) {
-                titulo = field.value();
-                encontrouCampo13 = true;
-                break;
+        if (card.customFields() != null) {
+            for (CustomField field : card.customFields()) {
+                if (field.fieldId() == 13 && field.value() != null && !field.value().isEmpty()) {
+                    titulo = field.value();
+                    encontrouCampo13 = true;
+                    break;
+                }
             }
         }
-        if (!encontrouCampo13) {
+        // Só adiciona " -PENDENTE" se não for devReport
+        if (!encontrouCampo13 && !isDevReport) {
             titulo += " -PENDENTE";
         }
         return titulo;
+    }
+
+    /**
+     * Método auxiliar usado em lugares onde ainda não passamos isDevReport explicitamente
+     * (ex: sorting genérico). Aqui você poderia assumir que não é devReport, OU
+     * simplesmente manter para retrocompatibilidade.
+     */
+    private String getTituloFinal(Card card) {
+        return getTituloFinal(card, false);
     }
 
     private String getDeveloperName(int userId, Map<Long, User> userMap) {
@@ -409,11 +477,10 @@ public class ExcelService {
     private String getStipulatedHours(Card card) {
         if (card.customFields() == null) return "";
         for (CustomField cf : card.customFields()) {
-            if (cf.fieldId() == 22 && cf.value() != null && !cf.value().isEmpty()) {
+            if (cf.fieldId() == 9 && cf.value() != null && !cf.value().isEmpty()) {
                 return cf.value();
             }
         }
         return "";
     }
-
 }

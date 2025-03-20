@@ -89,7 +89,7 @@ public class CardControllers {
 
             // Padrão: só coluna 31, que seria "IN PROGRESS"
             @Parameter(description = "Escolhido tudo que não é backlog - IDs das colunas separadas por vírgula. Exemplo: 32,164,163.")
-            @RequestParam(defaultValue = "30,31,32,33,73,74,76,81,163,164", name = "column_ids") String columnIds,
+            @RequestParam(defaultValue = "29,30,31,32,33,73,74,76,81,163,164", name = "column_ids") String columnIds,
 
             @Parameter(description = "Se true, retorna apenas os cards com link do GitHub. Se false, retorna todos os cards.")
             @RequestParam(defaultValue = "false", name = "filter_github") boolean filterGithub,

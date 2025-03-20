@@ -140,7 +140,9 @@ public class CardService {
                     allUsers,
                     fillChannels,
                     "dev-report",
-                    columns
+                    columns,
+                    from,
+                    to
             );
 
             return allCards;
@@ -188,7 +190,7 @@ public class CardService {
                     : "custom_fields,tag_ids";
 
             String url = String.format(
-                    "%s/cards?last_modified_from_date=%s&last_modified_to_date=%s&column_ids=%s&expand=%s",
+                    "%s/cards?last_modified_from_date=%s&last_modified_to_date=%s&per_page=1000&column_ids=%s&expand=%s",
                     kanbanConfig.getApiUrl(), startDate, endDate, columnId, expandParam
             );
 
