@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kanban_api.kanban_api.config.KanbanConfig;
 import com.kanban_api.kanban_api.models.Column;
-import com.kanban_api.kanban_api.models.ColumnResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;

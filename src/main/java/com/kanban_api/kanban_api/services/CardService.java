@@ -17,8 +17,18 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Service responsável pela busca de cards e geração de relatórios (Weekly e Dev).
+ * Observação: Comentários em português OK, mas variáveis e métodos em inglês.
+ */
 @Service
 public class CardService {
+
+    // -------------------------------------------------
+    // Constantes para IDs de campo/coluna importantes
+    // -------------------------------------------------
+    private static final int GITHUB_FIELD_ID = 11;
+    private static final int IN_PROGRESS_COLUMN_ID = 31;
 
     @Autowired
     private KanbanConfig kanbanConfig;
@@ -35,11 +45,10 @@ public class CardService {
     @Autowired
     private ColumnService columnService;
 
-
-    // ============================================================
-    // 1) WEEKLY REPORT (relatório antigo, inclui pontos)
-    // ============================================================
-    public List<Card> getWeeklyReport(
+    /**
+     * Gera relatório semanal (weeklyReport) com pontos incluídos.
+     */
+    public List<Card> generateWeeklyReport(
             String startDate,
             String endDate,
             String columnIds,
@@ -48,94 +57,108 @@ public class CardService {
             boolean fillChannels
     ) {
         try {
-            // Ajusta datas
-            if (startDate == null || startDate.isEmpty()) {
-                startDate = LocalDate.now().minusDays(7).format(DateTimeFormatter.ISO_DATE);
-            }
-            if (endDate == null || endDate.isEmpty()) {
-                endDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
-            }
+            // Ajuste de datas
+            String resolvedStartDate = (startDate == null || startDate.isEmpty())
+                    ? LocalDate.now().minusDays(7).format(DateTimeFormatter.ISO_DATE)
+                    : startDate;
 
-            // Converte string de colunas para lista
+            String resolvedEndDate = (endDate == null || endDate.isEmpty())
+                    ? LocalDate.now().format(DateTimeFormatter.ISO_DATE)
+                    : endDate;
+
+            // Converte lista de IDs de colunas
             List<String> columnList = Arrays.asList(columnIds.split(","));
 
-            // Busca cards
-            List<Card> allCards = fetchAllCards(startDate, endDate, columnList, filterGithub, singleSheet, false);
+            // Busca todos os cards
+            List<Card> cards = retrieveAllCards(
+                    resolvedStartDate,
+                    resolvedEndDate,
+                    columnList,
+                    filterGithub,
+                    singleSheet,
+                    false // includeLeadTime = false para weekly
+            );
 
-            // Salva JSON (por exemplo, "weekly-results-kanban.json")
-            cardView.saveResults(allCards, "weekly-results-kanban.json");
+            // Salva JSON
+            cardView.saveResults(cards, "weekly-results-kanban.json");
 
-            // Pega lista de usuários (mapeamento userId -> realname)
+            // Busca lista de usuários (userId -> realname)
             UserResponse userResponse = userService.fetchUsers();
             List<User> allUsers = userResponse.data();
 
-            // Gera EXCEL - definindo includePoints=true, e baseName="weekly-report"
+            // Gera Excel com pontos
             excelService.saveToExcel(
-                    allCards,
+                    cards,
                     singleSheet,
                     columnList,
                     allUsers,
                     fillChannels,
-                    true,               // includePoints = true
-                    "weekly-report"     // nome do arquivo base
+                    true,           // includePoints
+                    "weekly-report" // baseName
             );
 
-            return allCards;
-
+            return cards;
         } catch (Exception e) {
-            throw new RuntimeException("Erro ao obter o relatório semanal: " + e.getMessage(), e);
+            throw new RuntimeException("Error generating weekly report: " + e.getMessage(), e);
         }
     }
 
-    // ============================================================
-    // 2) DEV REPORT (novo, sem pontos)
-    // ============================================================
-    public List<Card> getDevReport(
+    /**
+     * Gera relatório de desenvolvimento (DevReport).
+     */
+    public List<Card> generateDevReport(
             String startDate,
             String endDate,
-            String columnIds,       // padrão será "30"
+            String columnIds,
             boolean singleSheet,
             boolean filterGithub,
             boolean fillChannels,
             boolean weeklyStipulatedCalculation
     ) {
         try {
-            // Ajusta datas
-            if (startDate == null || startDate.isEmpty()) {
-                startDate = LocalDate.now().minusDays(7).format(DateTimeFormatter.ISO_DATE);
-            }
-            if (endDate == null || endDate.isEmpty()) {
-                endDate = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
-            }
+            // Ajuste de datas
+            String resolvedStartDate = (startDate == null || startDate.isEmpty())
+                    ? LocalDate.now().minusDays(7).format(DateTimeFormatter.ISO_DATE)
+                    : startDate;
 
-            // Converte string de colunas para lista
+            String resolvedEndDate = (endDate == null || endDate.isEmpty())
+                    ? LocalDate.now().format(DateTimeFormatter.ISO_DATE)
+                    : endDate;
+
+            // Converte lista de IDs de colunas
             List<String> columnList = Arrays.asList(columnIds.split(","));
 
-            // Busca cards
-            List<Card> allCards = fetchAllCards(startDate, endDate, columnList, filterGithub, singleSheet, true);
+            // Busca todos os cards (leadTime incluído)
+            List<Card> cards = retrieveAllCards(
+                    resolvedStartDate,
+                    resolvedEndDate,
+                    columnList,
+                    filterGithub,
+                    singleSheet,
+                    true // includeLeadTime = true para dev
+            );
 
-            // Filtrar localmente: manter apenas os que passaram pela coluna 31 dentro do período
-            LocalDateTime from = LocalDate.parse(startDate).atStartOfDay();
-            // Fechamos em 23h59 do endDate
-            LocalDateTime to = LocalDate.parse(endDate).atTime(23, 59, 59);
+            // Filtra localmente os que passaram pela coluna "IN PROGRESS" dentro do período
+            LocalDateTime from = LocalDate.parse(resolvedStartDate).atStartOfDay();
+            LocalDateTime to = LocalDate.parse(resolvedEndDate).atTime(23, 59, 59);
 
-            allCards = allCards.stream()
-                    .filter(card -> passedByTheColumnInPeriod(card, 31, from, to))
+            cards = cards.stream()
+                    .filter(card -> wasCardInColumnDuringPeriod(card, IN_PROGRESS_COLUMN_ID, from, to))
                     .collect(Collectors.toList());
 
-            // Salva JSON (por exemplo, "dev-results-kanban.json")
-            cardView.saveResults(allCards, "dev-results-kanban.json");
+            // Salva JSON
+            cardView.saveResults(cards, "dev-results-kanban.json");
 
-            // Pega lista de usuários
+            // Busca lista de usuários
             UserResponse userResponse = userService.fetchUsers();
             List<User> allUsers = userResponse.data();
 
-            // Carrega colunas do board=4, workflow=6 (mude se precisar)
+            // Carrega colunas do board=4, workflow=6 (ajuste se preciso)
             List<Column> columns = columnService.getColumns(4, 6L);
 
             // Gera Excel com colunas dinâmicas
             excelService.saveToExcelDevDynamic(
-                    allCards,
+                    cards,
                     singleSheet,
                     columnList,
                     allUsers,
@@ -147,18 +170,20 @@ public class CardService {
                     weeklyStipulatedCalculation
             );
 
-            return allCards;
-
+            return cards;
         } catch (Exception e) {
-            throw new RuntimeException("Erro ao obter o relatório DEV: " + e.getMessage(), e);
+            throw new RuntimeException("Error generating dev report: " + e.getMessage(), e);
         }
     }
 
+    // ============================================================
+    // MÉTODOS PRIVADOS
+    // ============================================================
 
-    // ============================================================
-    // Método interno para buscar todos os cards de várias colunas
-    // ============================================================
-    private List<Card> fetchAllCards(
+    /**
+     * Busca todos os cards para múltiplas colunas, unindo em uma lista só.
+     */
+    private List<Card> retrieveAllCards(
             String startDate,
             String endDate,
             List<String> columnList,
@@ -166,34 +191,44 @@ public class CardService {
             boolean singleSheet,
             boolean includeLeadTime
     ) {
-        List<Card> allCards = new ArrayList<>();
-
         if (singleSheet) {
-            // Faz apenas 1 requisição, unindo todos os column_ids em uma string
+            // Apenas 1 requisição combinada
             String combinedCols = String.join(",", columnList);
-            allCards = fetchCards(startDate, endDate, combinedCols, filterGithub, includeLeadTime);
+            return retrieveCardsByColumn(startDate, endDate, combinedCols, filterGithub, includeLeadTime);
         } else {
-            // Faz uma requisição por coluna
+            // 1 requisição por coluna
+            List<Card> result = new ArrayList<>();
             for (String col : columnList) {
-                List<Card> cards = fetchCards(startDate, endDate, col, filterGithub, includeLeadTime);
-                allCards.addAll(cards);
+                List<Card> subset = retrieveCardsByColumn(startDate, endDate, col, filterGithub, includeLeadTime);
+                result.addAll(subset);
             }
+            return result;
         }
-        return allCards;
     }
 
     /**
-     * Busca cards de uma ou mais colunas (separadas por vírgula).
+     * Faz a chamada REST para buscar cards de uma ou mais colunas (separadas por vírgula).
      */
-    private List<Card> fetchCards(String startDate, String endDate, String columnId, boolean filterGithub, boolean includeLeadTime) {
+    private List<Card> retrieveCardsByColumn(
+            String startDate,
+            String endDate,
+            String columnId,
+            boolean filterGithub,
+            boolean includeLeadTime
+    ) {
         try {
             String expandParam = includeLeadTime
                     ? "custom_fields,tag_ids,lead_time_per_column,transitions"
                     : "custom_fields,tag_ids";
 
             String url = String.format(
-                    "%s/cards?last_modified_from_date=%s&last_modified_to_date=%s&per_page=1000&column_ids=%s&expand=%s",
-                    kanbanConfig.getApiUrl(), startDate, endDate, columnId, expandParam
+                    "%s/cards?last_modified_from_date=%s&last_modified_to_date=%s"
+                            + "&per_page=1000&column_ids=%s&expand=%s",
+                    kanbanConfig.getApiUrl(),
+                    startDate,
+                    endDate,
+                    columnId,
+                    expandParam
             );
 
             RestTemplate restTemplate = new RestTemplate();
@@ -212,49 +247,61 @@ public class CardService {
 
             List<Card> cards = Arrays.asList(mapper.treeToValue(cardsData, Card[].class));
 
-            // Se filterGithub == true, filtra apenas os que têm custom_field 11 preenchido
+            // Se filterGithub == true, filtra os que possuem campo GITHUB_FIELD_ID preenchido
             if (filterGithub) {
                 cards = cards.stream()
                         .filter(card -> card.customFields().stream()
-                                .anyMatch(field -> field.fieldId() == 11
-                                        && field.value() != null
-                                        && !field.value().isEmpty()))
+                                .anyMatch(field ->
+                                        field.fieldId() == GITHUB_FIELD_ID
+                                                && field.value() != null
+                                                && !field.value().isEmpty()
+                                ))
                         .collect(Collectors.toList());
             }
 
             return cards;
         } catch (Exception e) {
-            throw new RuntimeException("Erro ao buscar cards para columnId=" + columnId + ": " + e.getMessage(), e);
+            throw new RuntimeException("Error retrieving cards for columnId=" + columnId + ": " + e.getMessage(), e);
         }
     }
 
-    private boolean passedByTheColumnInPeriod(Card card, int desiredColumn,
-                                              LocalDateTime from, LocalDateTime to) {
+    /**
+     * Verifica se o card passou pela coluna desejada no intervalo [from, to].
+     */
+    private boolean wasCardInColumnDuringPeriod(Card card, int desiredColumnId,
+                                                LocalDateTime from, LocalDateTime to) {
         if (card.transitions() == null || card.transitions().isEmpty()) {
             return false;
         }
         for (Transition transition : card.transitions()) {
-            // Verifica se a coluna é a que queremos (31 = In Progress)
-            if (transition.column_id() == desiredColumn) {
+            if (transition.column_id() == desiredColumnId) {
                 LocalDateTime startT = parseZulu(transition.start());
-                // Se 'end' for null, assume que está até "agora"
+                // end nulo => até "agora"
                 LocalDateTime endT = (transition.end() == null)
                         ? LocalDateTime.now()
                         : parseZulu(transition.end());
 
-                // Se o intervalo [startT, endT] cruza [from, to], então passou
-                if (intervalOverlap(startT, endT, from, to)) {
+                // Se [startT, endT] cruza [from, to], então passou
+                if (intervalsOverlap(startT, endT, from, to)) {
                     return true;
                 }
             }
         }
         return false;
     }
+
+    /**
+     * Converte string Zulu/UTC para LocalDateTime.
+     */
     private LocalDateTime parseZulu(String zuluTime) {
         return OffsetDateTime.parse(zuluTime).toLocalDateTime();
     }
-    private boolean intervalOverlap(LocalDateTime start1, LocalDateTime end1,
-                                    LocalDateTime start2, LocalDateTime end2) {
+
+    /**
+     * Verifica sobreposição entre [start1, end1] e [start2, end2].
+     */
+    private boolean intervalsOverlap(LocalDateTime start1, LocalDateTime end1,
+                                     LocalDateTime start2, LocalDateTime end2) {
         // overlap se end1 >= start2 e start1 <= end2
         return !end1.isBefore(start2) && !start1.isAfter(end2);
     }

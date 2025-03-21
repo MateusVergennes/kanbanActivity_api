@@ -2,7 +2,6 @@ package com.kanban_api.kanban_api.controllers;
 
 import com.kanban_api.kanban_api.models.Card;
 import com.kanban_api.kanban_api.models.ColumnResponse;
-import com.kanban_api.kanban_api.models.UserResponse;
 import com.kanban_api.kanban_api.services.DailyService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;

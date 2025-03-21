@@ -6,13 +6,19 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 
+/**
+ * Service para calcular intervalos IN PROGRESS dentro de um período.
+ */
 @Service
 public class IntervalProgressService {
 
+    private static final int IN_PROGRESS_COLUMN_ID = 31; // ID da coluna "In Progress"
+
     /**
-     * Retorna, em segundos, quanto tempo esse Card passou na coluna "IN PROGRESS" (id=31)
-     * **dentro** do período [intervalStart, intervalEnd].
+     * Retorna, em segundos, quanto tempo o Card passou na coluna "IN PROGRESS" (id=31)
+     * dentro do período [intervalStart, intervalEnd].
      */
     public long getInProgressWithinPeriod(Card card, LocalDateTime intervalStart, LocalDateTime intervalEnd) {
         if (card.transitions() == null) {
@@ -21,24 +27,16 @@ public class IntervalProgressService {
 
         long totalSeconds = 0L;
         for (Transition t : card.transitions()) {
-            // Se for a coluna 31 (IN PROGRESS), consideramos
-            if (t.column_id() == 31) {
-                LocalDateTime transitionStart = parseZulu(t.start());
-                // Se t.end for null, significa que ainda está em IN PROGRESS agora
-                // (ou no último snapshot do Kanban). Então use 'LocalDateTime.now()'
-                LocalDateTime transitionEnd = (t.end() == null)
+            if (t.column_id() == IN_PROGRESS_COLUMN_ID) {
+                LocalDateTime startT = parseZulu(t.start());
+                LocalDateTime endT = (t.end() == null)
                         ? LocalDateTime.now()
                         : parseZulu(t.end());
 
-                // Verifica se [transitionStart, transitionEnd] cruza [intervalStart, intervalEnd]
-                if (transitionEnd.isAfter(intervalStart) && transitionStart.isBefore(intervalEnd)) {
-                    // Calcula a interseção real
-                    LocalDateTime overlapStart = (transitionStart.isAfter(intervalStart))
-                            ? transitionStart
-                            : intervalStart;
-                    LocalDateTime overlapEnd = (transitionEnd.isBefore(intervalEnd))
-                            ? transitionEnd
-                            : intervalEnd;
+                // Se [startT, endT] cruza [intervalStart, intervalEnd], somamos a parte overlapped
+                if (endT.isAfter(intervalStart) && startT.isBefore(intervalEnd)) {
+                    LocalDateTime overlapStart = startT.isAfter(intervalStart) ? startT : intervalStart;
+                    LocalDateTime overlapEnd = endT.isBefore(intervalEnd) ? endT : intervalEnd;
 
                     long overlapSec = java.time.Duration.between(overlapStart, overlapEnd).getSeconds();
                     if (overlapSec > 0) {
@@ -51,9 +49,8 @@ public class IntervalProgressService {
     }
 
     private LocalDateTime parseZulu(String zuluTime) {
-        // Converte do Z (UTC) para o fuso horário do Brasil
         return OffsetDateTime.parse(zuluTime)
-                .atZoneSameInstant(java.time.ZoneId.of("America/Sao_Paulo"))
+                .atZoneSameInstant(ZoneId.of("America/Sao_Paulo"))
                 .toLocalDateTime();
     }
 
