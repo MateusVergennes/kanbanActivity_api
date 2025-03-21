@@ -96,7 +96,8 @@ public class CardService {
             String columnIds,       // padrão será "30"
             boolean singleSheet,
             boolean filterGithub,
-            boolean fillChannels
+            boolean fillChannels,
+            boolean weeklyStipulatedCalculation
     ) {
         try {
             // Ajusta datas
@@ -142,7 +143,8 @@ public class CardService {
                     "dev-report",
                     columns,
                     from,
-                    to
+                    to,
+                    weeklyStipulatedCalculation
             );
 
             return allCards;

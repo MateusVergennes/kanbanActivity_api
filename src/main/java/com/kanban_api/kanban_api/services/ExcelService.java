@@ -195,7 +195,8 @@ public class ExcelService {
             String fileBaseName,
             List<Column> columns,
             LocalDateTime from,
-            LocalDateTime to
+            LocalDateTime to,
+            boolean weeklyStipulatedCalculation
     ) {
         try {
             File directory = new File(OUTPUT_DIR);
@@ -217,7 +218,7 @@ public class ExcelService {
 
             if (singleSheet) {
                 String filepath = OUTPUT_DIR + fileBaseName + ".xlsx";
-                saveSingleSheetDevDynamic(filepath, cards, userMap, tagMap, fillChannels, columns, from, to, isDevReport);
+                saveSingleSheetDevDynamic(filepath, cards, userMap, tagMap, fillChannels, columns, from, to, isDevReport, weeklyStipulatedCalculation);
             } else {
                 Map<Integer, List<Card>> cardsByColumn = cards.stream()
                         .collect(Collectors.groupingBy(Card::columnId));
@@ -227,7 +228,7 @@ public class ExcelService {
                     List<Card> cardsDaColuna = cardsByColumn.getOrDefault(colId, List.of());
 
                     String filePath = OUTPUT_DIR + fileBaseName + "-" + columnId + ".xlsx";
-                    saveSingleSheetDevDynamic(filePath, cardsDaColuna, userMap, tagMap, fillChannels, columns, from, to, isDevReport);
+                    saveSingleSheetDevDynamic(filePath, cardsDaColuna, userMap, tagMap, fillChannels, columns, from, to, isDevReport, weeklyStipulatedCalculation);
                 }
             }
         } catch (Exception e) {
@@ -235,9 +236,6 @@ public class ExcelService {
         }
     }
 
-    /**
-     * Cria uma aba "devReport" com colunas dinâmicas em ordem preferencial
-     */
     private void saveSingleSheetDevDynamic(
             String filePath,
             List<Card> cards,
@@ -247,7 +245,8 @@ public class ExcelService {
             List<Column> columns,
             LocalDateTime from,
             LocalDateTime to,
-            boolean isDevReport  // <-- novo parâmetro
+            boolean isDevReport,
+            boolean weeklyStipulatedCalculation
     ) throws IOException {
 
         // 1) Ordena as colunas pela ordem preferencial + alfabético
@@ -299,10 +298,12 @@ public class ExcelService {
         header.createCell(5).setCellValue("Progresso (%)");
         header.createCell(6).setCellValue("IN PROGRESS INTERVAL");
 
-        // 5) Agora criamos as colunas dinâmicas a partir de dynamicStart=7
+        // 5) Se NÃO for o cálculo semanal estipulado, criamos as colunas dinâmicas
         int dynamicStart = 7;
-        for (int i = 0; i < sortedColumns.size(); i++) {
-            header.createCell(dynamicStart + i).setCellValue(sortedColumns.get(i).name());
+        if (!weeklyStipulatedCalculation) {
+            for (int i = 0; i < sortedColumns.size(); i++) {
+                header.createCell(dynamicStart + i).setCellValue(sortedColumns.get(i).name());
+            }
         }
 
         // 6) Preenche as linhas
@@ -310,7 +311,7 @@ public class ExcelService {
         for (Card card : cards) {
             Row row = sheet.createRow(rowIndex++);
 
-            // 6.1) Dados básicos (agora com isDevReport=true)
+            // 6.1) Dados básicos (isDevReport=true)
             String titulo = getTituloFinal(card, isDevReport);
             String dev = getDeveloperName(card.ownerUserId(), userMap);
             String chamado = card.customId();
@@ -345,8 +346,7 @@ public class ExcelService {
                 }
             }
 
-            // 6.2) Calcula "Progresso (%)" na coluna 5
-            //      tempo em "IN PROGRESS" => ID=31
+            // 6.2) IN PROGRESS => ID=31
             List<LeadTimePerColumn> leadTimes = (card.leadTimePerColumn() != null)
                     ? card.leadTimePerColumn()
                     : List.of();
@@ -356,32 +356,46 @@ public class ExcelService {
                             LeadTimePerColumn::leadTime
                     ));
 
+            // Tempo total que o Card ficou em IN PROGRESS
             long inProgressSeconds = leadMap.getOrDefault(31L, 0L);
-            double estimatedSeconds = stipulatedHours * 3600.0;
-
-            double progressPercentage = 0.0;
-            if (estimatedSeconds > 0 && inProgressSeconds > 0) {
-                progressPercentage = (inProgressSeconds / estimatedSeconds) * 100.0;
-            }
-
-            String progressText = String.format("%.1f%%", progressPercentage);
-            row.createCell(5).setCellValue(progressText);
 
             // 6.3) IN PROGRESS INTERVAL => tempo parcial no [from, to]
             long partialSeconds = intervalProgressService.getInProgressWithinPeriod(card, from, to);
             row.createCell(6).setCellValue(formatSeconds(partialSeconds));
 
-            // 6.4) Preenche as colunas dinâmicas
-            int colIndex = dynamicStart;
-            for (Column col : sortedColumns) {
-                long cId = col.column_id();
-                long seconds = leadMap.getOrDefault(cId, 0L);
-                if (seconds > 0) {
-                    row.createCell(colIndex).setCellValue(formatSeconds(seconds));
-                } else {
-                    row.createCell(colIndex).setCellValue("");
+            // Calcula "Progresso (%)" com base no parâmetro
+            double estimatedSeconds = stipulatedHours * 3600.0;
+            double progressPercentage = 0.0;
+
+            if (weeklyStipulatedCalculation) {
+                // Se weeklyStipulatedCalculation = true, usa partialSeconds
+                if (estimatedSeconds > 0 && partialSeconds > 0) {
+                    progressPercentage = (partialSeconds / estimatedSeconds) * 100.0;
                 }
-                colIndex++;
+            } else {
+                // Senão, usa o tempo total inProgressSeconds
+                if (estimatedSeconds > 0 && inProgressSeconds > 0) {
+                    progressPercentage = (inProgressSeconds / estimatedSeconds) * 100.0;
+                }
+            }
+
+            String progressText = String.format("%.1f%%", progressPercentage);
+            row.createCell(5).setCellValue(progressText);
+
+            // 6.4) Se NÃO for weeklyStipulatedCalculation, preenche as colunas dinâmicas
+            if (!weeklyStipulatedCalculation) {
+                int colIndex = dynamicStart;
+                for (Column col : sortedColumns) {
+                    long cId = col.column_id();
+                    long seconds = leadMap.getOrDefault(cId, 0L);
+
+                    if (seconds > 0) {
+                        row.createCell(colIndex).setCellValue(formatSeconds(seconds));
+                    } else {
+                        row.createCell(colIndex).setCellValue("");
+                    }
+                    colIndex++;
+                }
             }
         }
 
@@ -391,6 +405,7 @@ public class ExcelService {
         }
         workbook.close();
     }
+
 
 
     /**

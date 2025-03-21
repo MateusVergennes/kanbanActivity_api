@@ -95,10 +95,13 @@ public class CardControllers {
             @RequestParam(defaultValue = "false", name = "filter_github") boolean filterGithub,
 
             @Parameter(description = "Se true, preenche a coluna 'Canal', exemplo 'LIVE! Oficial, Shop LIVE!, etc.'")
-            @RequestParam(defaultValue = "true", name = "fill_channels") boolean fillChannels
+            @RequestParam(defaultValue = "true", name = "fill_channels") boolean fillChannels,
+
+            @Parameter(description = "Se true, faz o cálculo semanal estipulado pelo dev. Não gera colunas dinâmicas e baseia o Progresso apenas no IN PROGRESS INTERVAL.")
+            @RequestParam(defaultValue = "false", name = "weekly_stipulated_calculation") boolean weeklyStipulatedCalculation
     ) {
         boolean singleSheet = true;
-        return cardService.getDevReport(startDate, endDate, columnIds, singleSheet, filterGithub, fillChannels);
+        return cardService.getDevReport(startDate, endDate, columnIds, singleSheet, filterGithub, fillChannels, weeklyStipulatedCalculation);
     }
 
     /**
