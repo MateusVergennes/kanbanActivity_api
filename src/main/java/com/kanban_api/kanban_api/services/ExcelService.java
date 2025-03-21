@@ -360,10 +360,10 @@ public class ExcelService {
                     statusCell.setCellStyle(redTextStyle);
                 } else if ((progressPercentage >= 75.0 && progressPercentage < 95.0)
                         || (progressPercentage > 105.0 && progressPercentage <= 125.0)) {
-                    statusCell.setCellValue("QUASE LÁ!");
+                    statusCell.setCellValue("QUE TAL DA PRÓXIMA ?");
                     statusCell.setCellStyle(orangeTextStyle);
                 } else {
-                    statusCell.setCellValue("PARABÉNS!!!");
+                    statusCell.setCellValue("JOGOU BEM!!!");
                     statusCell.setCellStyle(greenTextStyle);
                 }
             }
@@ -375,16 +375,21 @@ public class ExcelService {
 
             Row legendRow2 = sheet.createRow(legendRowIndex++);
             legendRow2.createCell(0).setCellValue(
-                    "• Progresso (%) = (In Progress Interval / Stipulated Hours) x 100."
+                    "• IN PROGRESS INTERVAL = Tempo que o card ficou na coluna “IN PROGRESS” durante a semana."
             );
 
             Row legendRow3 = sheet.createRow(legendRowIndex++);
             legendRow3.createCell(0).setCellValue(
-                    "• Quanto mais próximo de 100%, mais acertada a estimativa."
+                    "• Progresso (%) = (In Progress Interval / Stipulated Hours) x 100."
             );
 
             Row legendRow4 = sheet.createRow(legendRowIndex++);
             legendRow4.createCell(0).setCellValue(
+                    "• Quanto mais próximo de 100%, mais acertada a estimativa."
+            );
+
+            Row legendRow5 = sheet.createRow(legendRowIndex++);
+            legendRow5.createCell(0).setCellValue(
                     "• GAME OVER (<75% ou >125%) / QUASE LÁ! (>=75% e <95% ou >105% e <=125%) / PARABÉNS!!! (>=95% e <=105%)."
             );
 
