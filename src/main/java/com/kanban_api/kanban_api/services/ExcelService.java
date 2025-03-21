@@ -21,6 +21,7 @@ public class ExcelService {
 
     private static final int TITLE_FIELD_ID = 13;
     private static final int STIPULATED_HOURS_ID = 9;
+    private static final Long IN_PROGRESS_COLUMN = 31L;
     private static final List<String> PREFERRED_ORDER = Arrays.asList(
             "IN PROGRESS",
             "BACKLOG",
@@ -438,7 +439,7 @@ public class ExcelService {
                                 LeadTimePerColumn::leadTime
                         ));
 
-                long inProgressSeconds = leadMap.getOrDefault(31L, 0L);
+                long inProgressSeconds = leadMap.getOrDefault(IN_PROGRESS_COLUMN, 0L);
                 long partialSeconds = intervalProgressService.getInProgressWithinPeriod(card, from, to);
 
                 // Progresso
