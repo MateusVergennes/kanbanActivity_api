@@ -21,18 +21,6 @@ public class ExcelService {
 
     private static final int TITLE_FIELD_ID = 13;
     private static final int STIPULATED_HOURS_ID = 9;
-
-    @Autowired
-    private TagService tagService;
-
-    @Autowired
-    private IntervalProgressService intervalProgressService;
-
-    private static final String OUTPUT_DIR = "output/";
-
-    /**
-     * Ordem preferencial das colunas no devReport.
-     */
     private static final List<String> PREFERRED_ORDER = Arrays.asList(
             "IN PROGRESS",
             "BACKLOG",
@@ -45,6 +33,18 @@ public class ExcelService {
             "CLIENT DEMO",
             "DONE"
     );
+
+    @Autowired
+    private TagService tagService;
+
+    @Autowired
+    private IntervalProgressService intervalProgressService;
+
+    private static final String OUTPUT_DIR = "output/";
+
+    /**
+     * Ordem preferencial das colunas no devReport.
+     */
 
     // ------------------------------------------------------------------------------------
     // 1) Relatório SEMANAL (com pontos)
