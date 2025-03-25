@@ -127,7 +127,7 @@ public class ExcelService {
                 .collect(Collectors.toList());
 
         // Cabeçalho
-        boolean includeDeployTime = (deployTimes != null);
+        boolean includeDeployTime = deployTimes != null;
         createWeeklyHeader(sheet, includePoints, includeDeployTime);
 
         int rowIndex = 1;

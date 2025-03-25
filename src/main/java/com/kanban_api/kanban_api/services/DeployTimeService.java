@@ -16,8 +16,8 @@ import java.util.Set;
 @Service
 public class DeployTimeService {
 
-    // Defina as colunas de interesse
-    private static final Set<Integer> DEPLOY_COLUMNS = Set.of(32, 163, 164);
+    // DONE, se necessitar mais, apenas inserir em DEPLOY_COLUMNS
+    private static final Set<Integer> DEPLOY_COLUMNS = Set.of(32);
 
     /**
      * Método que percorre todos os cards e identifica o horário de deploy (hora de entrada
