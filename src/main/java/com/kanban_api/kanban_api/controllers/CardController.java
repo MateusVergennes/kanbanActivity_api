@@ -67,9 +67,12 @@ public class CardController {
             @RequestParam(defaultValue = "true", name = "filter_github") boolean filterGithub,
 
             @Parameter(description = "Se true, preenche a coluna 'Canal', exemplo 'LIVE! Oficial, Shop LIVE!, etc.")
-            @RequestParam(defaultValue = "true", name = "fill_channels") boolean fillChannels
+            @RequestParam(defaultValue = "true", name = "fill_channels") boolean fillChannels,
+
+            @Parameter(description = "Se true, cria a coluna com a hora do deploy")
+            @RequestParam(defaultValue = "true", name = "deployHour") boolean includeDeployTime
     ) {
-        return cardService.generateWeeklyReport(startDate, endDate, columnIds, singleSheet, filterGithub, fillChannels);
+        return cardService.generateWeeklyReport(startDate, endDate, columnIds, singleSheet, filterGithub, fillChannels, includeDeployTime);
     }
 
     /**

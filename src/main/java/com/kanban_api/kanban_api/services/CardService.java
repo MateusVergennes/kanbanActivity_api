@@ -45,6 +45,9 @@ public class CardService {
     @Autowired
     private ColumnService columnService;
 
+    @Autowired
+    private DeployTimeService deployTimeService;
+
     /**
      * Gera relatório semanal (weeklyReport) com pontos incluídos.
      */
@@ -54,7 +57,8 @@ public class CardService {
             String columnIds,
             boolean singleSheet,
             boolean filterGithub,
-            boolean fillChannels
+            boolean fillChannels,
+            boolean includeDeployTime
     ) {
         try {
             // Ajuste de datas
@@ -86,6 +90,12 @@ public class CardService {
             UserResponse userResponse = userService.fetchUsers();
             List<User> allUsers = userResponse.data();
 
+            // Se solicitado, calcula o horário de deploy
+            Map<Long, LocalDateTime> deployTimes = null;
+            if (includeDeployTime) {
+                deployTimes = deployTimeService.findDeployTimes(cards);
+            }
+
             // Gera Excel com pontos
             excelService.saveToExcel(
                     cards,
@@ -94,7 +104,8 @@ public class CardService {
                     allUsers,
                     fillChannels,
                     true,           // includePoints
-                    "weekly-report" // baseName
+                    "weekly-report",           // baseName
+                    deployTimes
             );
 
             return cards;
@@ -219,7 +230,7 @@ public class CardService {
         try {
             String expandParam = includeLeadTime
                     ? "custom_fields,tag_ids,lead_time_per_column,transitions"
-                    : "custom_fields,tag_ids";
+                    : "custom_fields,tag_ids,transitions";
 
             String url = String.format(
                     "%s/cards?last_modified_from_date=%s&last_modified_to_date=%s"

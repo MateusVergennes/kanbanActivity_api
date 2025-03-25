@@ -57,7 +57,8 @@ public class ExcelService {
             List<User> allUsers,
             boolean fillChannels,
             boolean includePoints,
-            String fileBaseName
+            String fileBaseName,
+            Map<Long, LocalDateTime> deployTimes
     ) {
         try {
             File directory = new File(OUTPUT_DIR);
@@ -79,7 +80,7 @@ public class ExcelService {
 
             if (singleSheet) {
                 String filepath = OUTPUT_DIR + fileBaseName + ".xlsx";
-                saveSingleSheetExcel(filepath, cards, userMap, tagMap, fillChannels, includePoints, isDevReport);
+                saveSingleSheetExcel(filepath, cards, userMap, tagMap, fillChannels, includePoints, isDevReport, deployTimes);
             } else {
                 // Gerar 1 arquivo por coluna
                 Map<Integer, List<Card>> cardsByColumn = cards.stream()
@@ -90,7 +91,7 @@ public class ExcelService {
                     List<Card> cardsFromColumn = cardsByColumn.getOrDefault(colId, List.of());
 
                     String filePath = OUTPUT_DIR + fileBaseName + "-" + columnId + ".xlsx";
-                    saveSingleSheetExcel(filePath, cardsFromColumn, userMap, tagMap, fillChannels, includePoints, isDevReport);
+                    saveSingleSheetExcel(filePath, cardsFromColumn, userMap, tagMap, fillChannels, includePoints, isDevReport, deployTimes);
                 }
             }
 
@@ -109,7 +110,8 @@ public class ExcelService {
             Map<Integer, String> tagMap,
             boolean fillChannels,
             boolean includePoints,
-            boolean isDevReport
+            boolean isDevReport,
+            Map<Long, LocalDateTime> deployTimes
     ) throws IOException {
 
         Workbook workbook = new XSSFWorkbook();
@@ -125,7 +127,8 @@ public class ExcelService {
                 .collect(Collectors.toList());
 
         // Cabeçalho
-        createWeeklyHeader(sheet, includePoints);
+        boolean includeDeployTime = (deployTimes != null);
+        createWeeklyHeader(sheet, includePoints, includeDeployTime);
 
         int rowIndex = 1;
         int totalPoints = 0;
@@ -162,6 +165,18 @@ public class ExcelService {
             if (includePoints) {
                 row.createCell(4).setCellValue(points);
             }
+
+            // Coluna "Hora do Deploy" (Opcional)
+            if (includeDeployTime) {
+                LocalDateTime deployTime = deployTimes.get(Long.valueOf(card.cardId()));
+                if (deployTime != null) {
+                    // Formate do seu jeito - por exemplo, "yyyy-MM-dd HH:mm"
+                    // Abaixo apenas .toString() para simplificar
+                    row.createCell(5).setCellValue(deployTime.toString());
+                } else {
+                    row.createCell(5).setCellValue("");
+                }
+            }
         }
 
         // Desempenho (cálculo simples)
@@ -178,7 +193,7 @@ public class ExcelService {
         workbook.close();
     }
 
-    private void createWeeklyHeader(Sheet sheet, boolean includePoints) {
+    private void createWeeklyHeader(Sheet sheet, boolean includePoints, boolean includeDeployTime) {
         Row headerRow = sheet.createRow(0);
         headerRow.createCell(0).setCellValue("Título");
         headerRow.createCell(1).setCellValue("Desenvolvedor");
@@ -186,6 +201,9 @@ public class ExcelService {
         headerRow.createCell(3).setCellValue("Chamado");
         if (includePoints) {
             headerRow.createCell(4).setCellValue("Pontos");
+        }
+        if (includeDeployTime) {
+            headerRow.createCell(5).setCellValue("Hora do Deploy");
         }
     }
 
