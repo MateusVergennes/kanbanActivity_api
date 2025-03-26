@@ -48,6 +48,9 @@ public class CardService {
     @Autowired
     private DeployTimeService deployTimeService;
 
+    @Autowired
+    private FilterIntervalTransitionsService filterIntervalTransitionsService;
+
     /**
      * Gera relatório semanal (weeklyReport) com pontos incluídos.
      */
@@ -202,19 +205,28 @@ public class CardService {
             boolean singleSheet,
             boolean includeLeadTime
     ) {
+        List<Card> result = new ArrayList<>();
         if (singleSheet) {
             // Apenas 1 requisição combinada
             String combinedCols = String.join(",", columnList);
-            return retrieveCardsByColumn(startDate, endDate, combinedCols, filterGithub, includeLeadTime);
+            result = retrieveCardsByColumn(startDate, endDate, combinedCols, filterGithub, includeLeadTime);
         } else {
             // 1 requisição por coluna
-            List<Card> result = new ArrayList<>();
             for (String col : columnList) {
                 List<Card> subset = retrieveCardsByColumn(startDate, endDate, col, filterGithub, includeLeadTime);
                 result.addAll(subset);
             }
-            return result;
+
+
         }
+        String fallbackStart = (startDate == null || startDate.isEmpty()) ? LocalDate.now().minusDays(7).format(DateTimeFormatter.ISO_DATE) : startDate;
+        String fallbackEnd = (endDate == null || endDate.isEmpty()) ? LocalDate.now().format(DateTimeFormatter.ISO_DATE) : endDate;
+        LocalDate startLD = LocalDate.parse(fallbackStart);
+        LocalDate endLD = LocalDate.parse(fallbackEnd);
+
+        result = filterIntervalTransitionsService.filterCardsWithoutTransitionsInPeriod(result, startLD, endLD);
+
+        return result;
     }
 
     /**
