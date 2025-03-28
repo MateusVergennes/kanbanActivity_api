@@ -30,7 +30,7 @@ public class CardController {
 
     /**
      * Retorna os cards do Kanban dentro de um período e gera um relatório em Excel.
-     *
+     * <p>
      * Parâmetro extra:
      * - fill_channels: se true, preenche a coluna "Canal" (mais lento, pois chama /cards/{cardId}/tags e aguarda 2s entre cada chamada).
      */
@@ -87,7 +87,7 @@ public class CardController {
             @Parameter(description = "Data de fim (YYYY-MM-DD). Padrão: Hoje.")
             @RequestParam(required = false, name = "end_date") String endDate,
 
-            @Parameter(description = "Escolhido tudo que não é backlog. IDs das colunas separados por vírgula. Ex: 29,30,31, etc.")
+            @Parameter(description = "IDs das colunas separados por vírgula. Ex: 29,30,31, etc.")
             @RequestParam(defaultValue = "29,30,31,32,33,73,74,76,81,163,164", name = "column_ids") String columnIds,
 
             @Parameter(description = "Se true, retorna apenas os cards com link do GitHub. Se false, retorna todos os cards.")
@@ -97,10 +97,13 @@ public class CardController {
             @RequestParam(defaultValue = "true", name = "fill_channels") boolean fillChannels,
 
             @Parameter(description = "Se true, faz o cálculo semanal estipulado pelo dev, não gera colunas dinâmicas e baseia o Progresso no IN PROGRESS INTERVAL.")
-            @RequestParam(defaultValue = "false", name = "weekly_stipulated_calculation") boolean weeklyStipulatedCalculation
+            @RequestParam(defaultValue = "false", name = "weekly_stipulated_calculation") boolean weeklyStipulatedCalculation,
+
+            @Parameter(description = "Se true, remove do relatório os cards sem o campo de Horas Estipuladas preenchido (campo customField=9). Só vale quando weekly_stipulated_calculation=true.")
+            @RequestParam(defaultValue = "false", name = "filterBystipulatedHours") boolean filterBystipulatedHours
     ) {
         boolean singleSheet = true; // Forçado
-        return cardService.generateDevReport(startDate, endDate, columnIds, singleSheet, filterGithub, fillChannels, weeklyStipulatedCalculation);
+        return cardService.generateDevReport(startDate, endDate, columnIds, singleSheet, filterGithub, fillChannels, weeklyStipulatedCalculation, filterBystipulatedHours);
     }
 
     /**

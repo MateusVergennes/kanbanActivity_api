@@ -411,6 +411,11 @@ public class ExcelService {
                     "• GAME OVER (<75% ou >125%) / QUASE LÁ! (>=75% e <95% ou >105% e <=125%) / PARABÉNS!!! (>=95% e <=105%)."
             );
 
+            Row legendRow6 = sheet.createRow(legendRowIndex++);
+            legendRow6.createCell(0).setCellValue(
+                    "• Neste relatório, constam apenas os cards que, ao longo da semana, passaram pela coluna “IN PROGRESS” e possuíam o campo “HORAS ESTIPULADAS” preenchido."
+            );
+
         } else {
             // Cabeçalho completo
             Row header = sheet.createRow(0);

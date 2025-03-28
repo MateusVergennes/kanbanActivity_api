@@ -127,7 +127,8 @@ public class CardService {
             boolean singleSheet,
             boolean filterGithub,
             boolean fillChannels,
-            boolean weeklyStipulatedCalculation
+            boolean weeklyStipulatedCalculation,
+            boolean filterBystipulatedHours
     ) {
         try {
             // Ajuste de datas
@@ -159,6 +160,22 @@ public class CardService {
             cards = cards.stream()
                     .filter(card -> wasCardInColumnDuringPeriod(card, IN_PROGRESS_COLUMN_ID, from, to))
                     .collect(Collectors.toList());
+
+            //SE weeklyStipulatedCalculation && filterBystipulatedHours => exclui os que não têm Horas Estipuladas
+            if (weeklyStipulatedCalculation && filterBystipulatedHours) {
+                cards = cards.stream()
+                        .filter(card -> {
+                            // Verifica se customField ID=9 tem valor não vazio
+                            if (card.customFields() == null) return false;
+                            return card.customFields().stream()
+                                    .anyMatch(cf ->
+                                            cf.fieldId() == 9 &&
+                                                    cf.value() != null &&
+                                                    !cf.value().isEmpty()
+                                    );
+                        })
+                        .collect(Collectors.toList());
+            }
 
             // Salva JSON
             cardView.saveResults(cards, "dev-results-kanban.json");
