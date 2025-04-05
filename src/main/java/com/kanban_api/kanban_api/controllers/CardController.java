@@ -97,10 +97,10 @@ public class CardController {
             @RequestParam(defaultValue = "true", name = "fill_channels") boolean fillChannels,
 
             @Parameter(description = "Se true, faz o cálculo semanal estipulado pelo dev, não gera colunas dinâmicas e baseia o Progresso no IN PROGRESS INTERVAL.")
-            @RequestParam(defaultValue = "false", name = "weekly_stipulated_calculation") boolean weeklyStipulatedCalculation,
+            @RequestParam(defaultValue = "true", name = "weekly_stipulated_calculation") boolean weeklyStipulatedCalculation,
 
             @Parameter(description = "Se true, remove do relatório os cards sem o campo de Horas Estipuladas preenchido (campo customField=9). Só vale quando weekly_stipulated_calculation=true.")
-            @RequestParam(defaultValue = "false", name = "filterBystipulatedHours") boolean filterBystipulatedHours
+            @RequestParam(defaultValue = "true", name = "filterBystipulatedHours") boolean filterBystipulatedHours
     ) {
         boolean singleSheet = true; // Forçado
         return cardService.generateDevReport(startDate, endDate, columnIds, singleSheet, filterGithub, fillChannels, weeklyStipulatedCalculation, filterBystipulatedHours);
