@@ -22,6 +22,15 @@ public class ExcelService {
     private static final int TITLE_FIELD_ID = 13;
     private static final int STIPULATED_HOURS_ID = 9;
     private static final Long IN_PROGRESS_COLUMN = 31L;
+
+    // >>> NOVAS CONSTANTES para as colunas DONE, CLIENT_DEMO e DEPLOYED <<<
+    private static final long DONE_COLUMN_ID = 32L;
+    private static final long CLIENT_DEMO_COLUMN_ID = 163L;
+    private static final long DEPLOYED_COLUMN_ID = 164L;
+
+    private static final String OUTPUT_DIR = "output/";
+
+    // Ordem preferencial das colunas no devReport.
     private static final List<String> PREFERRED_ORDER = Arrays.asList(
             "IN PROGRESS",
             "BACKLOG",
@@ -41,11 +50,8 @@ public class ExcelService {
     @Autowired
     private IntervalProgressService intervalProgressService;
 
-    private static final String OUTPUT_DIR = "output/";
-
-    /**
-     * Ordem preferencial das colunas no devReport.
-     */
+    @Autowired
+    private DevIndividualReportService devIndividualReportService;
 
     // ------------------------------------------------------------------------------------
     // 1) Relatório SEMANAL (com pontos)
@@ -66,23 +72,19 @@ public class ExcelService {
                 directory.mkdir();
             }
 
-            // Mapeia userId -> User
             Map<Long, User> userMap = allUsers.stream()
                     .collect(Collectors.toMap(User::user_id, u -> u));
 
-            // Mapeia tagId -> label
             List<Tag> allTags = tagService.getAllTags();
             Map<Integer, String> tagMap = allTags.stream()
                     .collect(Collectors.toMap(Tag::tag_id, Tag::label));
 
-            // isDevReport = false (pois é relatório semanal)
             boolean isDevReport = false;
 
             if (singleSheet) {
                 String filepath = OUTPUT_DIR + fileBaseName + ".xlsx";
                 saveSingleSheetExcel(filepath, cards, userMap, tagMap, fillChannels, includePoints, isDevReport, deployTimes);
             } else {
-                // Gerar 1 arquivo por coluna
                 Map<Integer, List<Card>> cardsByColumn = cards.stream()
                         .collect(Collectors.groupingBy(Card::columnId));
 
@@ -100,9 +102,6 @@ public class ExcelService {
         }
     }
 
-    /**
-     * Cria apenas UMA aba Excel para o relatório semanal.
-     */
     private void saveSingleSheetExcel(
             String filePath,
             List<Card> cards,
@@ -117,7 +116,7 @@ public class ExcelService {
         Workbook workbook = new XSSFWorkbook();
         Sheet sheet = workbook.createSheet("Report");
 
-        // Ordenação básica
+        // Ordenação
         cards = cards.stream()
                 .sorted(
                         Comparator
@@ -126,8 +125,7 @@ public class ExcelService {
                 )
                 .collect(Collectors.toList());
 
-        // Cabeçalho
-        boolean includeDeployTime = deployTimes != null;
+        boolean includeDeployTime = (deployTimes != null);
         createWeeklyHeader(sheet, includePoints, includeDeployTime);
 
         int rowIndex = 1;
@@ -149,14 +147,13 @@ public class ExcelService {
                         .collect(Collectors.joining(", "));
             }
 
-            // Pontos (opcional)
+            // Pontos
             int points = 0;
             if (includePoints) {
                 points = calculatePoints(finalTitle);
                 totalPoints += points;
             }
 
-            // Preenche células
             row.createCell(0).setCellValue(finalTitle);
             row.createCell(1).setCellValue(devName);
             row.createCell(2).setCellValue(channel);
@@ -166,20 +163,14 @@ public class ExcelService {
                 row.createCell(4).setCellValue(points);
             }
 
-            // Coluna "Hora do Deploy" (Opcional)
             if (includeDeployTime) {
                 LocalDateTime deployTime = deployTimes.get(Long.valueOf(card.cardId()));
-                if (deployTime != null) {
-                    // Formate do seu jeito - por exemplo, "yyyy-MM-dd HH:mm"
-                    // Abaixo apenas .toString() para simplificar
-                    row.createCell(5).setCellValue(deployTime.toString());
-                } else {
-                    row.createCell(5).setCellValue("");
-                }
+                row.createCell(5).setCellValue(
+                        (deployTime != null) ? deployTime.toString() : ""
+                );
             }
         }
 
-        // Desempenho (cálculo simples)
         if (includePoints && !cards.isEmpty()) {
             double performance = (double) totalPoints / (cards.size() * 20) * 100;
             Row finalRow = sheet.createRow(cards.size() + 2);
@@ -208,7 +199,7 @@ public class ExcelService {
     }
 
     // ------------------------------------------------------------------------------------
-    // 2) devReport dinâmico (usa lead_time_per_column e columns) com ordem custom
+    // 2) devReport dinâmico
     // ------------------------------------------------------------------------------------
     public void saveToExcelDevDynamic(
             List<Card> cards,
@@ -220,7 +211,9 @@ public class ExcelService {
             List<Column> columns,
             LocalDateTime from,
             LocalDateTime to,
-            boolean weeklyStipulatedCalculation
+            boolean weeklyStipulatedCalculation,
+            boolean resultsByDev,
+            double legendaryThreshold
     ) {
         try {
             File directory = new File(OUTPUT_DIR);
@@ -228,11 +221,9 @@ public class ExcelService {
                 directory.mkdir();
             }
 
-            // Mapa userId -> User
             Map<Long, User> userMap = allUsers.stream()
                     .collect(Collectors.toMap(User::user_id, u -> u));
 
-            // Mapa tagId -> label
             List<Tag> allTags = tagService.getAllTags();
             Map<Integer, String> tagMap = allTags.stream()
                     .collect(Collectors.toMap(Tag::tag_id, Tag::label));
@@ -241,7 +232,21 @@ public class ExcelService {
 
             if (singleSheet) {
                 String filepath = OUTPUT_DIR + fileBaseName + ".xlsx";
-                saveSingleSheetDevDynamic(filepath, cards, userMap, tagMap, fillChannels, columns, from, to, isDevReport, weeklyStipulatedCalculation);
+                saveSingleSheetDevDynamic(
+                        filepath,
+                        cards,
+                        userMap,
+                        tagMap,
+                        fillChannels,
+                        columns,
+                        from,
+                        to,
+                        isDevReport,
+                        weeklyStipulatedCalculation,
+                        resultsByDev,
+                        allUsers,
+                        legendaryThreshold
+                );
             } else {
                 Map<Integer, List<Card>> cardsByColumn = cards.stream()
                         .collect(Collectors.groupingBy(Card::columnId));
@@ -251,7 +256,21 @@ public class ExcelService {
                     List<Card> cardsFromColumn = cardsByColumn.getOrDefault(colId, List.of());
 
                     String filePath = OUTPUT_DIR + fileBaseName + "-" + columnId + ".xlsx";
-                    saveSingleSheetDevDynamic(filePath, cardsFromColumn, userMap, tagMap, fillChannels, columns, from, to, isDevReport, weeklyStipulatedCalculation);
+                    saveSingleSheetDevDynamic(
+                            filePath,
+                            cardsFromColumn,
+                            userMap,
+                            tagMap,
+                            fillChannels,
+                            columns,
+                            from,
+                            to,
+                            isDevReport,
+                            weeklyStipulatedCalculation,
+                            resultsByDev,
+                            allUsers,
+                            legendaryThreshold
+                    );
                 }
             }
         } catch (Exception e) {
@@ -260,8 +279,7 @@ public class ExcelService {
     }
 
     /**
-     * Cria uma aba "devReport" com colunas dinâmicas em ordem preferencial.
-     * Se weeklyStipulatedCalculation=true, a lógica de ordenação muda um pouco.
+     * Salva a planilha devReport
      */
     private void saveSingleSheetDevDynamic(
             String filePath,
@@ -273,17 +291,23 @@ public class ExcelService {
             LocalDateTime from,
             LocalDateTime to,
             boolean isDevReport,
-            boolean weeklyStipulatedCalculation
+            boolean weeklyStipulatedCalculation,
+            boolean resultsByDev,
+            List<User> allUsers,
+            double legendaryThreshold
     ) throws IOException {
 
         Workbook workbook = new XSSFWorkbook();
 
-        // Styles para a coluna "Status"
-        CellStyle redTextStyle = createTextColorStyle(workbook, IndexedColors.RED);
-        CellStyle orangeTextStyle = createTextColorStyle(workbook, IndexedColors.ORANGE);
-        CellStyle greenTextStyle = createTextColorStyle(workbook, IndexedColors.GREEN);
+        CellStyle redTextStyle = createColoredStyle(workbook, IndexedColors.RED, false);
+        CellStyle orangeTextStyle = createColoredStyle(workbook, IndexedColors.ORANGE, false);
+        CellStyle greenTextStyle = createColoredStyle(workbook, IndexedColors.GREEN, false);
 
-        // Ordena colunas pela ordem preferencial + alfabético se não tiver na lista
+        CellStyle blueTextStyle = createColoredStyle(workbook, IndexedColors.BLUE, false);
+        // Verde + negrito (LENDÁRIO!)
+        CellStyle greenBoldStyle = createColoredStyle(workbook, IndexedColors.GREEN, true);
+
+        // Ordena colunas pela ordem preferencial
         List<Column> sortedColumns = new ArrayList<>(columns);
         sortedColumns.sort((c1, c2) -> {
             String n1 = c1.name().toUpperCase();
@@ -304,75 +328,129 @@ public class ExcelService {
             return n1.compareTo(n2);
         });
 
-        // Ordenação dos cards
-        if (weeklyStipulatedCalculation) {
-            // Ordenar pela "proximidade" de 100%
-            List<CardAux> cardAuxList = new ArrayList<>();
-            for (Card card : cards) {
-                double stipulatedHours = parseStipulatedHours(getStipulatedHoursValue(card));
-                double estimatedSeconds = stipulatedHours * 3600.0;
-                long partialSeconds = intervalProgressService.getInProgressWithinPeriod(card, from, to);
-
-                double progressPercentage = 0.0;
-                if (estimatedSeconds > 0 && partialSeconds > 0) {
-                    progressPercentage = partialSeconds / estimatedSeconds * 100.0;
-                }
-                cardAuxList.add(new CardAux(card, partialSeconds, progressPercentage));
-            }
-            cardAuxList.sort(Comparator.comparingDouble(aux -> Math.abs(aux.progressPercentage - 100.0)));
-            // Reconstrói a lista
-            cards = cardAuxList.stream().map(aux -> aux.card).collect(Collectors.toList());
-
-        } else {
-            // Ordenação antiga: prioridade + dev
-            cards = cards.stream()
-                    .sorted(
-                            Comparator
-                                    .comparingInt((Card c) -> getPriority(determineFinalTitle(c, isDevReport)))
-                                    .thenComparing((Card c) -> getDeveloperName(c.ownerUserId(), userMap))
-                    )
-                    .collect(Collectors.toList());
-        }
-
         Sheet sheet = workbook.createSheet("devReport");
 
         if (weeklyStipulatedCalculation) {
-            // Cabeçalho específico
+            // -------------------------------------------------------------------------
+            // 1) Cabeçalho (renomeando para "Assertividade (%)" no lugar de "Progresso")
+            // -------------------------------------------------------------------------
             Row header = sheet.createRow(0);
             header.createCell(0).setCellValue("Chamado");
             header.createCell(1).setCellValue("Título");
             header.createCell(2).setCellValue("Desenvolvedor");
             header.createCell(3).setCellValue("Horas Estipuladas");
             header.createCell(4).setCellValue("In Progress Interval");
-            header.createCell(5).setCellValue("Progresso (%)");
+            header.createCell(5).setCellValue("Assertividade (%)"); // renomeado
             header.createCell(6).setCellValue("Status");
 
-            int rowIndex = 1;
+            // -------------------------------------------------------------------------
+            // 2) Guardar os dados em uma lista auxiliar, inclusive se é LENDÁRIO ou não
+            // -------------------------------------------------------------------------
+            List<CardAux> cardAuxList = new ArrayList<>();
             for (Card card : cards) {
+                double stipulatedHours = parseStipulatedHours(getStipulatedHoursValue(card));
+                double estimatedSeconds = stipulatedHours * 3600.0;
+                long partialSeconds = intervalProgressService.getInProgressWithinPeriod(card, from, to);
+
+                double partialRatio = 0.0;
+                if (estimatedSeconds > 0 && partialSeconds > 0) {
+                    partialRatio = (partialSeconds / estimatedSeconds) * 100.0;
+                }
+
+                boolean isDoneOrDeployedOrDemo = isFinalColumnOneOf(
+                        card.columnId(),
+                        DONE_COLUMN_ID,
+                        DEPLOYED_COLUMN_ID,
+                        CLIENT_DEMO_COLUMN_ID
+                );
+
+                boolean isLegendary = false;
+                // Só se legendaryThreshold <= 100
+                if (legendaryThreshold <= 100
+                        && isDoneOrDeployedOrDemo
+                        && partialSeconds < estimatedSeconds
+                        && partialRatio >= legendaryThreshold)
+                {
+                    isLegendary = true;
+                }
+
+                // Monta o CardAux
+                CardAux aux = new CardAux(card, partialSeconds, partialRatio);
+                aux.stipulatedHours = stipulatedHours;
+                aux.isLegendary = isLegendary;
+                aux.estimatedSeconds = estimatedSeconds;
+
+                cardAuxList.add(aux);
+            }
+
+            // -------------------------------------------------------------------------
+            // 3) Ordenar: lendários primeiro, depois o restante, cada grupo pela "proximidade de 100"
+            // -------------------------------------------------------------------------
+            cardAuxList.sort((a, b) -> {
+                // Lendários primeiro
+                if (a.isLegendary && !b.isLegendary) return -1;
+                if (!a.isLegendary && b.isLegendary) return 1;
+
+                // Se ambos lendários ou ambos não-lendários, comparar pela dist. de 100
+                double distA = Math.abs(a.progressPercentage - 100.0);
+                double distB = Math.abs(b.progressPercentage - 100.0);
+                return Double.compare(distA, distB);
+            });
+
+            // -------------------------------------------------------------------------
+            // 4) Imprimir as linhas no Excel, usando a lista final
+            // -------------------------------------------------------------------------
+            int rowIndex = 1;
+            for (CardAux aux : cardAuxList) {
+                Card card = aux.card;
                 Row row = sheet.createRow(rowIndex++);
+
+                // Horas / partialSeconds / partialRatio
+                double stipulatedHours = aux.stipulatedHours;
+                double estimatedSeconds = aux.estimatedSeconds;
+                double partialSeconds = aux.partialSeconds;
+                double progressPercentage = aux.progressPercentage; // 0 a 100+ ?
+
+                // Se stipulatedHours==0 => "-"
+                String hoursCellValue = (stipulatedHours > 0)
+                        ? String.valueOf(stipulatedHours)
+                        : "-";
+
+                // Se hours==0 => assertividade = "-"
+                String assertividadeValue = (stipulatedHours == 0)
+                        ? "-"
+                        : String.format("%.1f%%", progressPercentage);
 
                 String customId = card.customId();
                 String finalTitle = determineFinalTitle(card, isDevReport);
                 String devName = getDeveloperName(card.ownerUserId(), userMap);
 
-                double stipulatedHours = parseStipulatedHours(getStipulatedHoursValue(card));
-                double estimatedSeconds = stipulatedHours * 3600.0;
-
-                long partialSeconds = intervalProgressService.getInProgressWithinPeriod(card, from, to);
-                double progressPercentage = 0.0;
-                if (estimatedSeconds > 0 && partialSeconds > 0) {
-                    progressPercentage = partialSeconds / estimatedSeconds * 100.0;
-                }
-
+                // Preenche colunas
                 row.createCell(0).setCellValue(customId);
                 row.createCell(1).setCellValue(finalTitle);
                 row.createCell(2).setCellValue(devName);
-                row.createCell(3).setCellValue(String.valueOf(stipulatedHours));
-                row.createCell(4).setCellValue(formatSeconds(partialSeconds));
-                row.createCell(5).setCellValue(String.format("%.1f%%", progressPercentage));
+                row.createCell(3).setCellValue(hoursCellValue);
+                row.createCell(4).setCellValue(formatSeconds((long) partialSeconds));
+                row.createCell(5).setCellValue(assertividadeValue);
 
-                // Status com cor
+                // Determina status
                 Cell statusCell = row.createCell(6);
+
+                if (stipulatedHours == 0) {
+                    // SEM PLANEJAMENTO
+                    statusCell.setCellValue("SEM PLANEJAMENTO");
+                    statusCell.setCellStyle(blueTextStyle);
+                    continue;
+                }
+
+                // Se isLegendary == true => "LENDÁRIO!"
+                if (aux.isLegendary) {
+                    statusCell.setCellValue("LENDÁRIO!");
+                    statusCell.setCellStyle(greenBoldStyle);
+                    continue;
+                }
+
+                // Caso contrário, lógica GAME OVER, QUE TAL, JOGOU BEM
                 if (progressPercentage < 75.0 || progressPercentage > 125.0) {
                     statusCell.setCellValue("GAME OVER");
                     statusCell.setCellStyle(redTextStyle);
@@ -386,48 +464,45 @@ public class ExcelService {
                 }
             }
 
-            // Legenda
-            int legendRowIndex = cards.size() + 3;
+            // -------------------------------------------------------------------------
+            // 5) Legenda etc.
+            // -------------------------------------------------------------------------
+            int legendRowIndex = cardAuxList.size() + 3;
             Row legendRow1 = sheet.createRow(legendRowIndex++);
             legendRow1.createCell(0).setCellValue("Legenda do Cálculo de Progresso Semanal:");
 
             Row legendRow2 = sheet.createRow(legendRowIndex++);
-            legendRow2.createCell(0).setCellValue(
-                    "• IN PROGRESS INTERVAL = Tempo que o card ficou na coluna “IN PROGRESS” durante a semana."
-            );
+            legendRow2.createCell(0).setCellValue("• IN PROGRESS INTERVAL = Tempo que o card ficou na coluna 'IN PROGRESS' durante a semana.");
 
             Row legendRow3 = sheet.createRow(legendRowIndex++);
-            legendRow3.createCell(0).setCellValue(
-                    "• Progresso (%) = (In Progress Interval / Stipulated Hours) x 100."
-            );
+            legendRow3.createCell(0).setCellValue("• Assertividade (%) = (In Progress Interval / Horas Estipuladas) x 100.");
 
             Row legendRow4 = sheet.createRow(legendRowIndex++);
-            legendRow4.createCell(0).setCellValue(
-                    "• Quanto mais próximo de 100%, mais acertada a estimativa."
-            );
+            legendRow4.createCell(0).setCellValue("• Quanto mais próximo de 100%, mais acertada a estimativa.");
 
             Row legendRow5 = sheet.createRow(legendRowIndex++);
-            legendRow5.createCell(0).setCellValue(
-                    "• GAME OVER (<75% ou >125%) / QUASE LÁ! (>=75% e <95% ou >105% e <=125%) / PARABÉNS!!! (>=95% e <=105%)."
-            );
+            legendRow5.createCell(0).setCellValue("• GAME OVER (<75% ou >125%) / QUE TAL DA PRÓXIMA ? (>=75% e <95% ou >105% e <=125%) / JOGOU BEM!!! (>=95% e <=105%).");
 
             Row legendRow6 = sheet.createRow(legendRowIndex++);
-            legendRow6.createCell(0).setCellValue(
-                    "• Neste relatório, constam apenas os cards que, ao longo da semana, passaram pela coluna “IN PROGRESS” e possuíam o campo “HORAS ESTIPULADAS” preenchido."
-            );
+            legendRow6.createCell(0).setCellValue("• Neste relatório, constam apenas os cards que passaram pela coluna 'IN PROGRESS' e possuíam 'HORAS ESTIPULADAS'.");
+
+            if (resultsByDev) {
+                int startRowForDevs = legendRowIndex + 2;
+                // Anexa o bloco individual
+                devIndividualReportService.appendByDevBelow(sheet, cards, from, to, allUsers, startRowForDevs);
+            }
 
         } else {
-            // Cabeçalho completo
+            // Cabeçalho completo...
             Row header = sheet.createRow(0);
             header.createCell(0).setCellValue("Título");
             header.createCell(1).setCellValue("Desenvolvedor");
             header.createCell(2).setCellValue("Canal");
             header.createCell(3).setCellValue("Chamado");
             header.createCell(4).setCellValue("Horas Estipuladas");
-            header.createCell(5).setCellValue("Progresso (%)");
+            header.createCell(5).setCellValue("Assertividade (%)"); // renomeamos aqui também
             header.createCell(6).setCellValue("In Progress Interval");
 
-            // Colunas dinâmicas a partir de colIndex=7
             int dynamicStart = 7;
             for (int i = 0; i < sortedColumns.size(); i++) {
                 header.createCell(dynamicStart + i).setCellValue(sortedColumns.get(i).name());
@@ -451,12 +526,9 @@ public class ExcelService {
                 }
                 String customId = card.customId();
 
-                // Stipulated Hours
-                String stipulatedHoursStr = getStipulatedHoursValue(card);
-                double stipulatedHours = parseStipulatedHours(stipulatedHoursStr);
+                double stipulatedHours = parseStipulatedHours(getStipulatedHoursValue(card));
                 double estimatedSeconds = stipulatedHours * 3600.0;
 
-                // leadTimes
                 List<LeadTimePerColumn> leadTimes = (card.leadTimePerColumn() != null)
                         ? card.leadTimePerColumn()
                         : List.of();
@@ -470,10 +542,9 @@ public class ExcelService {
                 long inProgressSeconds = leadMap.getOrDefault(IN_PROGRESS_COLUMN, 0L);
                 long partialSeconds = intervalProgressService.getInProgressWithinPeriod(card, from, to);
 
-                // Progresso
                 double progressPercentage = 0.0;
-                if (estimatedSeconds > 0 && inProgressSeconds > 0) {
-                    progressPercentage = inProgressSeconds / estimatedSeconds * 100.0;
+                if (estimatedSeconds > 0 && partialSeconds > 0) {
+                    progressPercentage = partialSeconds / estimatedSeconds * 100.0;
                 }
                 String progressText = String.format("%.1f%%", progressPercentage);
 
@@ -482,11 +553,19 @@ public class ExcelService {
                 row.createCell(1).setCellValue(devName);
                 row.createCell(2).setCellValue(channel);
                 row.createCell(3).setCellValue(customId);
-                row.createCell(4).setCellValue(stipulatedHoursStr);
-                row.createCell(5).setCellValue(progressText);
+                row.createCell(4).setCellValue(
+                        (stipulatedHours > 0)
+                                ? String.valueOf(stipulatedHours)
+                                : "-"
+                );
+                row.createCell(5).setCellValue(
+                        (stipulatedHours == 0)
+                                ? "-"
+                                : progressText
+                );
                 row.createCell(6).setCellValue(formatSeconds(partialSeconds));
 
-                // Colunas dinâmicas (lead_time_per_column)
+                // As colunas dinâmicas
                 int colIndex = dynamicStart;
                 for (Column col : sortedColumns) {
                     long cId = col.column_id();
@@ -498,6 +577,11 @@ public class ExcelService {
                     }
                     colIndex++;
                 }
+            }
+
+            if (resultsByDev) {
+                int startRowForDevs = (cards.size() + 3);
+                devIndividualReportService.appendByDevBelow(sheet, cards, from, to, allUsers, startRowForDevs);
             }
         }
 
@@ -511,9 +595,6 @@ public class ExcelService {
     // Métodos auxiliares
     // ---------------------------------------------------
 
-    /**
-     * Formata segundos em "HHh MMm SSs".
-     */
     private String formatSeconds(long totalSeconds) {
         long hours = totalSeconds / 3600;
         long remainder = totalSeconds % 3600;
@@ -533,21 +614,25 @@ public class ExcelService {
         }
     }
 
-    /**
-     * Cria um CellStyle que apenas muda a cor da fonte (texto).
-     */
-    private CellStyle createTextColorStyle(Workbook workbook, IndexedColors fontColor) {
+    // >>> Novo método para criar estilo com cor e, opcionalmente, negrito <<<
+    private CellStyle createColoredStyle(Workbook workbook, IndexedColors color, boolean bold) {
         CellStyle style = workbook.createCellStyle();
         Font font = workbook.createFont();
-        font.setColor(fontColor.getIndex());
+        font.setColor(color.getIndex());
+        if (bold) {
+            font.setBold(true);
+        }
         style.setFont(font);
-        style.setFillPattern(FillPatternType.NO_FILL);
         return style;
     }
 
     /**
-     * Usa o campo custom (ID=13) ou anexa "-PENDENTE" se não encontrou (caso não seja devReport).
+     * Verifica se o card está em uma das colunas [done, deployed, client demo].
      */
+    private boolean isFinalColumnOneOf(long cardColumnId, long c1, long c2, long c3) {
+        return (cardColumnId == c1 || cardColumnId == c2 || cardColumnId == c3);
+    }
+
     private String determineFinalTitle(Card card, boolean isDevReport) {
         String originalTitle = card.title();
         boolean foundTitleField = false;
@@ -563,7 +648,6 @@ public class ExcelService {
         }
 
         if (!foundTitleField && !isDevReport) {
-            // Só adiciona " -PENDENTE" se não for devReport
             originalTitle += " -PENDENTE";
         }
         return originalTitle;
@@ -603,9 +687,6 @@ public class ExcelService {
         return 0;
     }
 
-    /**
-     * Retorna valor do campo custom (ID=9) "Stipulated Hours", se existir.
-     */
     private String getStipulatedHoursValue(Card card) {
         if (card.customFields() == null) return "";
         for (CustomField cf : card.customFields()) {
@@ -617,17 +698,24 @@ public class ExcelService {
     }
 
     /**
-     * Auxiliar para armazenar dados durante ordenação no weeklyStipulatedCalculation=true.
+     * Classe auxiliar para armazenar o card + métricas calculadas,
+     * inclusive se é lendário ou não.
      */
     private static class CardAux {
         Card card;
         long partialSeconds;
-        double progressPercentage;
+        double progressPercentage; // ex.: 80.0 => 80%
+        boolean isLegendary;
+        double stipulatedHours;
+        double estimatedSeconds;
 
         CardAux(Card card, long partialSeconds, double progressPercentage) {
             this.card = card;
             this.partialSeconds = partialSeconds;
             this.progressPercentage = progressPercentage;
+            this.isLegendary = false;
+            this.stipulatedHours = 0.0;
+            this.estimatedSeconds = 0.0;
         }
     }
 }

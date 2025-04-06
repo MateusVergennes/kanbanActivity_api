@@ -50,6 +50,8 @@ public class CardService {
 
     @Autowired
     private FilterIntervalTransitionsService filterIntervalTransitionsService;
+    @Autowired
+    private DevIndividualReportService devIndividualReportService;
 
     /**
      * Gera relatório semanal (weeklyReport) com pontos incluídos.
@@ -107,7 +109,7 @@ public class CardService {
                     allUsers,
                     fillChannels,
                     true,           // includePoints
-                    "weekly-report",           // baseName
+                    "weekly-report",
                     deployTimes
             );
 
@@ -128,7 +130,9 @@ public class CardService {
             boolean filterGithub,
             boolean fillChannels,
             boolean weeklyStipulatedCalculation,
-            boolean filterBystipulatedHours
+            boolean filterBystipulatedHours,
+            boolean resultsByDev,
+            double legendaryThreshold
     ) {
         try {
             // Ajuste de datas
@@ -165,7 +169,6 @@ public class CardService {
             if (weeklyStipulatedCalculation && filterBystipulatedHours) {
                 cards = cards.stream()
                         .filter(card -> {
-                            // Verifica se customField ID=9 tem valor não vazio
                             if (card.customFields() == null) return false;
                             return card.customFields().stream()
                                     .anyMatch(cf ->
@@ -187,7 +190,7 @@ public class CardService {
             // Carrega colunas do board=4, workflow=6 (ajuste se preciso)
             List<Column> columns = columnService.getColumns(4, 6L);
 
-            // Gera Excel com colunas dinâmicas
+            // Gera Excel com colunas dinâmicas (relatório principal)
             excelService.saveToExcelDevDynamic(
                     cards,
                     singleSheet,
@@ -198,7 +201,9 @@ public class CardService {
                     columns,
                     from,
                     to,
-                    weeklyStipulatedCalculation
+                    weeklyStipulatedCalculation,
+                    resultsByDev,
+                    legendaryThreshold
             );
 
             return cards;
@@ -233,14 +238,18 @@ public class CardService {
                 List<Card> subset = retrieveCardsByColumn(startDate, endDate, col, filterGithub, includeLeadTime);
                 result.addAll(subset);
             }
-
-
         }
-        String fallbackStart = (startDate == null || startDate.isEmpty()) ? LocalDate.now().minusDays(7).format(DateTimeFormatter.ISO_DATE) : startDate;
-        String fallbackEnd = (endDate == null || endDate.isEmpty()) ? LocalDate.now().format(DateTimeFormatter.ISO_DATE) : endDate;
+
+        String fallbackStart = (startDate == null || startDate.isEmpty())
+                ? LocalDate.now().minusDays(7).format(DateTimeFormatter.ISO_DATE)
+                : startDate;
+        String fallbackEnd = (endDate == null || endDate.isEmpty())
+                ? LocalDate.now().format(DateTimeFormatter.ISO_DATE)
+                : endDate;
         LocalDate startLD = LocalDate.parse(fallbackStart);
         LocalDate endLD = LocalDate.parse(fallbackEnd);
 
+        // Filtra cartões que não tiveram transições no período
         result = filterIntervalTransitionsService.filterCardsWithoutTransitionsInPeriod(result, startLD, endLD);
 
         return result;
@@ -345,5 +354,4 @@ public class CardService {
         // overlap se end1 >= start2 e start1 <= end2
         return !end1.isBefore(start2) && !start1.isAfter(end2);
     }
-
 }

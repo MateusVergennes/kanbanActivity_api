@@ -100,10 +100,16 @@ public class CardController {
             @RequestParam(defaultValue = "true", name = "weekly_stipulated_calculation") boolean weeklyStipulatedCalculation,
 
             @Parameter(description = "Se true, remove do relatório os cards sem o campo de Horas Estipuladas preenchido (campo customField=9). Só vale quando weekly_stipulated_calculation=true.")
-            @RequestParam(defaultValue = "true", name = "filterBystipulatedHours") boolean filterBystipulatedHours
+            @RequestParam(defaultValue = "false", name = "filterBystipulatedHours") boolean filterBystipulatedHours,
+
+            @Parameter(description = "Se true, gera relatórios individuais por desenvolvedor.")
+            @RequestParam(defaultValue = "true", name = "resultsByDev") boolean resultsByDev,
+
+            @Parameter(description = "Porcentagem mínima de horas cumpridas para ser considerado LENDÁRIO. (0-100%)")
+            @RequestParam(defaultValue = "50", name = "legendaryThreshold") double legendaryThreshold
     ) {
         boolean singleSheet = true; // Forçado
-        return cardService.generateDevReport(startDate, endDate, columnIds, singleSheet, filterGithub, fillChannels, weeklyStipulatedCalculation, filterBystipulatedHours);
+        return cardService.generateDevReport(startDate, endDate, columnIds, singleSheet, filterGithub, fillChannels, weeklyStipulatedCalculation, filterBystipulatedHours, resultsByDev, legendaryThreshold);
     }
 
     /**
