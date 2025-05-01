@@ -125,7 +125,7 @@ public class ExcelService {
                 )
                 .collect(Collectors.toList());
 
-        boolean includeDeployTime = (deployTimes != null);
+        boolean includeDeployTime = deployTimes != null;
         createWeeklyHeader(sheet, includePoints, includeDeployTime);
 
         int rowIndex = 1;
@@ -354,7 +354,7 @@ public class ExcelService {
 
                 double partialRatio = 0.0;
                 if (estimatedSeconds > 0 && partialSeconds > 0) {
-                    partialRatio = (partialSeconds / estimatedSeconds) * 100.0;
+                    partialRatio = partialSeconds / estimatedSeconds * 100.0;
                 }
 
                 boolean isDoneOrDeployedOrDemo = isFinalColumnOneOf(
@@ -407,7 +407,6 @@ public class ExcelService {
 
                 // Horas / partialSeconds / partialRatio
                 double stipulatedHours = aux.stipulatedHours;
-                double estimatedSeconds = aux.estimatedSeconds;
                 double partialSeconds = aux.partialSeconds;
                 double progressPercentage = aux.progressPercentage; // 0 a 100+ ?
 
@@ -539,7 +538,6 @@ public class ExcelService {
                                 LeadTimePerColumn::leadTime
                         ));
 
-                long inProgressSeconds = leadMap.getOrDefault(IN_PROGRESS_COLUMN, 0L);
                 long partialSeconds = intervalProgressService.getInProgressWithinPeriod(card, from, to);
 
                 double progressPercentage = 0.0;
@@ -580,7 +578,7 @@ public class ExcelService {
             }
 
             if (resultsByDev) {
-                int startRowForDevs = (cards.size() + 3);
+                int startRowForDevs = cards.size() + 3;
                 devIndividualReportService.appendByDevBelow(sheet, cards, from, to, allUsers, startRowForDevs);
             }
         }
@@ -630,7 +628,7 @@ public class ExcelService {
      * Verifica se o card está em uma das colunas [done, deployed, client demo].
      */
     private boolean isFinalColumnOneOf(long cardColumnId, long c1, long c2, long c3) {
-        return (cardColumnId == c1 || cardColumnId == c2 || cardColumnId == c3);
+        return cardColumnId == c1 || cardColumnId == c2 || cardColumnId == c3;
     }
 
     private String determineFinalTitle(Card card, boolean isDevReport) {
